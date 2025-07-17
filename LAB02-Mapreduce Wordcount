@@ -1,0 +1,120 @@
+yarn-site.xml dosyasına aşağıdaki kaynak parametreleri eklenir.
+
+<property>
+        <name>yarn.scheduler.minimum-allocation-mb</name>
+        <value>1024</value> 
+    </property>
+    <property>
+        <name>yarn.scheduler.maximum-allocation-mb</name>
+        <value>2048</value>
+    </property>
+    <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>4096</value> 
+    </property>
+    <property>
+        <name>yarn.nodemanager.aux-services</name>
+        <value>mapreduce_shuffle</value>
+      </property>
+      <property>
+        <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+        <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+</property>
+
+-------
+mapred-site.xml dosyasına aşağıdaki kaynak parametreleri eklenir.
+
+    <property>
+        <name>mapreduce.map.memory.mb</name>
+        <value>2048</value> <!-- 2 GB -->
+    </property>
+    <property>
+        <name>mapreduce.reduce.memory.mb</name>
+        <value>2048</value> <!-- 2 GB -->
+    </property>
+    <property>
+        <name>mapreduce.map.cpu-vcores</name>
+        <value>1</value>
+    </property>
+    <property>
+        <name>mapreduce.reduce.cpu-vcores</name>
+        <value>2</value>
+    </property>
+    <property> 
+        <name>yarn.app.mapreduce.am.env</name> 
+    <value>HADOOP_MAPRED_HOME=/cluster/hadoop</value> 
+    </property> 
+    <property> 
+        <name>mapreduce.map.env</name>
+        <value>HADOOP_MAPRED_HOME=/cluster/hadoop</value> 
+    </property>
+    <property>
+         <name>mapreduce.reduce.env</name> 
+        <value>HADOOP_MAPRED_HOME=/cluster/hadoop</value>
+ 	</property>
+
+------
+Nodemanager'ların resource manager'a kendini kaydedebilmesi için aşağıdaki parametreler worker node'ların yarn-site.xml dosyasına kaydedilir.
+
+<property>
+  <name>yarn.resourcemanager.hostname</name>
+  <value>spark-master</value>
+</property>
+<property>
+  <name>yarn.resourcemanager.address</name>
+  <value>spark-master:8032</value>
+</property>
+------
+Master node'dan stop-all.sh komutu ile servisler stop edilip sonrasında start-all.sh komutu ile servisler start edilir.
+
+------
+
+Hadoopta örnek olarak çalıştıracağımız uygulama kurulumdan sonra /cluster/hadoop/share/hadoop/mapreduce dizini altında bulunan hadoop-mapreduce-examples-3.4.0.jar uygulamasıdır. Bu uygulama wordcount uygulamasıdır. Input olarak verilen hdfs üzerindeki bir dosyayı alarak output olarak bu dosyada yer alan kelime saysını döndürür. Uygulamayı çalıştırmak için öncelikle bir metin dosyası oluşturarak hdfs’e kopyalamak gerekir.
+
+Hadoop kullanıcısının home dizininde metin dosyası oluşturulur.
+[hadoop@masternode01]$ echo -e "Bigdata is a powerful technology\nHadoop is used for big data\nHadoop is open source" > /home/hadoop/example.txt
+
+Daha sonra hdfs üzerinde input dizini oluşturulur ve example.txt dosyası hdfs’e kopyalanır.
+[hadoop@masternode01]$ hdfs dfs -mkdir /input 
+[hadoop@masternode01]$ hdfs dfs -put /home/hadoop/example.txt /input/
+
+
+Uygulamayı çalıştırmak için aşağıdaki komut kullanılır.
+[hadoop@masternode01]$ hadoop jar /cluster/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-examples-3.4.0.jar wordcount /input/example.txt /output
+
+
+Uygulama çalıştıktan sonra çıktısı kontrol edilir.
+[hadoop@masternode01 hadoop]$ hdfs dfs -cat /output/part-r-00000
+Bigdata 1
+Hadoop  2
+a       1
+big     1
+data    1
+for     1
+is      3
+open    1
+powerful        1
+source  1
+technology      1
+used    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
