@@ -1,0 +1,13 @@
+ssh key oluşturmak için
+ssh-keygen -t rsa -b 4096 -C "veyselforGCP" -f ~/.ssh/gcp-key
+
+Bunu VM'e kopyala, bağlanmak istediğin user name'i sonuna ekle
+
+
+Sunucularda aşağıdaki ayarı /etc/ssh/sshd_config dosyasında yap ve ssh servisi restart et.
+ClientAliveInterval 60
+ClientAliveCountMax 5
+
+
+Metadata sekmesinden tüm node'lara SSH için Key'i ekleyebiliriz
+compute engine > settings > metadata
