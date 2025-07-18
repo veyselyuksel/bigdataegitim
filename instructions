@@ -1,0 +1,10 @@
+Google Cloud hesabı açılır
+Google Cloudda 1 adet VM instance Manuel olarak oluşturulur.(Terminal sunucu)
+Terminal sunucuya ssh yapabilmek için sshkey oluşturulur ve google arayüzünde meta sekmesinden bu ssh key import edilir.
+Bu VM'i terminal sunucuyu google cloudda lab ortamlarında makine kurup kaldırmak için kullanacağız. Terraform otomasyon tool'u kullanacağız.
+Terminal sunucuya Terraform kurulumu yapılır. Bu adımda terraform ve Google cloud api entegrasyonunu sağlamak için google client API'de kurulur ve authentication sağlanır.
+Terminal sunucuda 4 adet terraform dosyası oluşturulu ve init, plan ve apply adımlarından sonra Google cloudda 3 adet VM oluşturulmuş olur.
+Artık terminal sunucu ile işimiz yok. Baplantı koparılabilir.
+3 adet sunucunun her birine bağlanabilmek için SSH key kullanılır, 2 adımda meta'ya import ettiğimiz için proje genelinde tüm VM'ler bu ssh key'i görecektir.
+3 adet terminal sunucuda ssh ayarları yapılır.(bağlantı kopmaması için)
+3 adet sunucuda hadoop kurulumu başlatılır.
