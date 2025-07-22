@@ -1,7 +1,13 @@
 ssh key oluşturmak için
 ssh-keygen -t rsa -b 4096 -C "veyselforGCP" -f ~/.ssh/gcp-key
 
+windows
+ssh-keygen -t rsa 
+
 Bunu VM'e kopyala, bağlanmak istediğin user name'i sonuna ekle
+
+
+ssh -i  gcp-key vyuksel215@35.226.93.179 
 
 
 Sunucularda aşağıdaki ayarı /etc/ssh/sshd_config dosyasında yap ve ssh servisi restart et.
