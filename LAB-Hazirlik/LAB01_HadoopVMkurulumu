@@ -1,0 +1,98 @@
+Bu döküman ile 1 adet terminal VM kurduktan sonra bu terminal üzerinden GCP’de 3 adet VM olutşurulur. Bu 3 sunucu Hadoop Cluster kurulumunda kullanılacaktır.
+Genel Yapı (3 Node)
+
+1 Master Node 
+2 Worker Node
+
+---- TERRAFORM KURULUM ----
+
+GCP’de oluşturulan Terminal VM sunucusuna terraform kurarak, Eğitim boyunca oluşturulacak sanal makinelerin otomasyon ile kurulumu sağlanacaktır. 
+
+Adım 1: Google Cloud'da RHEL 8 VM Oluştur
+
+GCP Console → Compute Engine → VM Instances → Create Instance
+Manuel olarak Rhel 8 - e2-medium (2 vCPUs, 4 GB Memory)
+
+Adım 2: RHEL 8 Üzerine Terraform ve GCloud CLI Kurulumu
+
+2.1 Terraform Kurulumu
+
+
+
+
+# Terraform binary indir
+
+
+# Aç ve taşı
+
+
+
+
+
+
+
+
+
+
+
+2.2 Google Cloud CLI (gcloud) Kurulumu
+
+# Google Cloud SDK repo ekle
+
+
+
+
+# GCloud kur. gcloud init ile kendi hesabına bağlan ya da servis hesabı kullan.
+
+
+
+
+✅ Adım 3: Yetkilendirme
+
+Seçenek 1: Google hesabı ile çalışmak
+
+Eğitim/test amaçlı ideal:
+
+gcloud auth application-default login
+
+** bu adımda terminalden bir url çıkacak, o url web browsera yapıştırılacak ve  ilgili güvenlik kodu alınarak bu komutun beklediği cevap olarak verilecek terminale.
+
+✅ Adım 4: Terraform Dosyalarını Kullan ve Cluster'ı Oluştur
+Terminal sunucuda scripts isimli bir dizin oluştur ve aşağıdaki dosyaları içerikleri aynı olacak şekilde bu scripts klasörü altına kopyala.(vi ile dosya içeriklerini de kopyalarak dosyaları oluşturabilirsin.)
+main.tf
+Outputs.tf
+Terraform.tfvars (Bu dosya içindeki project_id = "polished-coil-464307-k7" değerini kendi ID’in ile değiştirmelisin.) 
+variables.tf 
+
+
+4.2 Terraform ile işlemleri başlat
+
+terraform init
+terraform plan
+terraform apply
+
+Bu komutlar başarılı çalıştıktan sonra GCP compute engine sekmesinden VM’ler kontrol edilir ve 3 adet VM oluştuğu teyit edilir.
+
+**Kaynakları Temizlemek İçin:
+Eğer bu sunucuları silmek istersen aşağıdaki komutu kullanarak tüm GCP kaynaklarını silebilirsin.
+terraform destroy
+
+
+
+
+OLASI PROBLEM
+
+google_compute_network.vpc_network: Creating...
+╷
+│ Error: Error creating Network: googleapi: Error 404: The resource 'projects/senin-gcp-proje-id' was not found, notFound
+│ 
+Bu hata, Terraform’un Google Cloud API’sine erişmeye çalışırken belirtilen proje ID’sini bulamaması nedeniyle oluşuyor. Hatanın özü:
+
+The resource 'projects/senin-gcp-proje-id' was not found, notFound
+Sorunun Olası Nedenleri ve Çözümleri
+
+1. terraform.tfvars içindeki project_id değerini gerçek GCP proje ID’n ile değiştirmedin
+terraform.tfvars dosyasını aç ve şu satırı kontrol et:
+project_id = "senin-gcp-proje-id"
+Burası mutlaka Google Cloud Console’da oluşturduğun projenin gerçek ID’si olmalı, örneğin:
+my-spark-project-12345
