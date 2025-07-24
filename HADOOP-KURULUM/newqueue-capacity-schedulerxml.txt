@@ -1,4 +1,4 @@
-newqueue adında Yeni bir kuyruk oluşturup sistem kaynaklarının %50'sini bu kuyruğa tanımak için kullanılacak capacity scheduler xml dosyası
+newqueue adında Yeni bir kuyruk oluşturup sistem kaynaklarının %50'sini bu kuyruğa tanımak için kullanılacak capacity scheduler xml dosyası. xml dosyası 3.satırdan başlar
 
 <!--
   Licensed under the Apache License, Version 2.0 (the "License");
