@@ -1,0 +1,115 @@
+Örnek CSV Dosyaları
+
+---------------------- customers.csv dosyası içeriği
+customer_id,name,city
+101,Ali,Ankara
+102,Veli,İstanbul
+103,Ayşe,İzmir
+104,Mehmet,Bursa
+---------------------sales.csv dosyası içeriği
+sale_id,customer_id,amount,year
+1,101,49.99,2025
+2,102,29.99,2025
+3,103,39.99,2025
+4,101,19.99,2025
+5,104,99.99,2024
+
+-------------------------Dosyaları Linux Sistemine Kaydet
+
+# Hadoop master node üzerinde hadoop kullanıcısıyla aşağıdaki komutları çalıştırarak linux üzerinde örnek olarak verilen dosyaları kolayca oluşturabiliriz.
+
+echo -e "customer_id,name,city\n101,Ali,Ankara\n102,Veli,İstanbul\n103,Ayşe,İzmir\n104,Mehmet,Bursa" > /home/hadoop/customers.csv
+echo -e "sale_id,customer_id,amount,year\n1,101,49.99,2025\n2,102,29.99,2025\n3,103,39.99,2025\n4,101,19.99,2025\n5,104,99.99,2024" > /home/hadoop/sales.csv
+------------------------- Dosyaları HDFS’e Yükle
+
+# HDFS üzerinde hedef dizin oluştur
+hdfs dfs -mkdir -p /user/hive/data/
+
+# Dosyaları HDFS'e yükle
+hdfs dfs -put /home/hadoop/customers.csv /user/hive/data/
+hdfs dfs -put /home/hadoop/sales.csv /user/hive/data/
+  
+------------------Hive Tablosu Oluşturma
+
+-- Hive terminal (Beeline veya hive CLI) üzerinde:
+CREATE TABLE customers (
+    customer_id INT,
+    name STRING,
+    city STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+CREATE TABLE sales (
+    sale_id INT,
+    customer_id INT,
+    amount DECIMAL(10,2),
+    year STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+-----------------------------------------------
+--------------- Verileri Hive Tablosuna Yükleme
+
+LOAD DATA INPATH '/user/hive/data/customers.csv' INTO TABLE customers;
+LOAD DATA INPATH '/user/hive/data/sales.csv' INTO TABLE sales;
+
+Bunlar managed table tipindedir. tablo tipini görmek için aşağıdaki komuttan yararlanabiliriz
+
+DESCRIBE FORMATTED tablo_adı;
+--------------------------------Test: Hive Üzerinden Sorgula
+
+SELECT * FROM customers;
+SELECT * FROM sales;
+
+
+-------customers ve sales tablolarındaki verilerden, ORC formatında ve optimize edilmiş bir özet tablo (sales_summary) oluşturmak.
+  Hedef ORC Tablosunu Oluştur (Managed Table):
+
+CREATE TABLE sales_summary (
+  customer_id INT,
+  total_amount DECIMAL(10,2),
+  year STRING
+)
+STORED AS ORC;
+
+--------------- Veriyi Dönüştürerek Yükle (Insert-Select ile):
+
+INSERT INTO TABLE sales_summary
+SELECT 
+  c.customer_id, 
+  SUM(s.amount) AS total_amount, 
+  s.year
+FROM 
+  customers c
+JOIN 
+  sales s
+ON 
+  c.customer_id = s.customer_id
+GROUP BY 
+  c.customer_id, s.year;
+
+
+
+------------Kontrol Et:
+
+SELECT * FROM sales_summary LIMIT 10;
+
+
+------------ ORC Dosyaları Nerede?
+
+Eğer managed table ise:
+
+HDFS dizini:
+/user/hive/warehouse/sales_summary/
+hdfs dfs -ls /user/hive/warehouse/sales_summary/
+
+
+
+
+
+
+
