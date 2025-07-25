@@ -1,0 +1,62 @@
+Case:
+Siparişleri region alanına göre partition edin.
+Verileri ORC formatında saklayın.
+Tabloyu external olarak oluşturun ki HDFS’ten veri silinmesin.
+Gerekirse yıl bazlı order_date üzerinden filtrelemeli sorgular yazın.
+
+  ---------
+
+Önce verileri HDFS’e uygun klasörlere yerleştirelim:
+
+hdfs dfs -mkdir -p /user/hive/external/orders_partitioned/region=East
+hdfs dfs -mkdir -p /user/hive/external/orders_partitioned/region=West
+hdfs dfs -mkdir -p /user/hive/external/orders_partitioned/region=North
+hdfs dfs -mkdir -p /user/hive/external/orders_partitioned/region=South
+
+# csv dosyasını manuel olarak her bölge klasörüne bölünmüş şekilde yükleyin (veya script ile bölebilirim istersen)
+
+  # Örnek:
+hdfs dfs -put orders_east.csv /user/hive/external/orders_partitioned/region=East/
+hdfs dfs -put orders_west.csv /user/hive/external/orders_partitioned/region=West/
+...
+
+----------------Hive DDL – External, Partitioned, ORC Table
+
+CREATE DATABASE IF NOT EXISTS ecommerce;
+
+USE ecommerce;
+
+CREATE EXTERNAL TABLE IF NOT EXISTS orders_partitioned (
+    order_id INT,
+    customer_id INT,
+    product_id INT,
+    quantity INT,
+    price DECIMAL(10,2),
+    order_date STRING
+)
+PARTITIONED BY (region STRING)
+STORED AS ORC
+LOCATION '/user/hive/external/orders_partitioned'
+TBLPROPERTIES ('orc.compress'='SNAPPY');
+
+
+---------------------------
+  partition bilgileri hive tarafından okunması için
+
+  MSCK REPAIR TABLE orders_partitioned;
+
+------
+  Sorgu Örnekleri
+
+1. East bölgesindeki siparişleri sorgula
+SELECT * FROM orders_partitioned
+WHERE region = 'East';
+
+2. Toplam satışları bölge bazlı hesapla
+SELECT region, SUM(quantity * price) AS total_revenue
+FROM orders_partitioned
+GROUP BY region;
+
+3. order_date üzerinden filtreleme (örnek: Temmuz ayı)
+SELECT * FROM orders_partitioned
+WHERE order_date >= '2025-07-01' AND order_date <= '2025-07-31';
