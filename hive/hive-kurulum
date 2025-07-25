@@ -1,1 +1,257 @@
-hive kurulum
+Hive Kurulum
+Clusterdaki worker node'lardan birine hive kurulur.
+
+[vyuksel215@spark-worker-0 ~]$ sudo useradd -m -s /bin/bash hive
+[vyuksel215@spark-worker-0 ~]$ sudo usermod -aG hadoop hive
+
+
+[vyuksel215@spark-worker-0 ~]$ sudo wget https://dlcdn.apache.org/hive/hive-4.0.1/apache-hive-4.0.1-bin.tar.gz  
+[vyuksel215@spark-worker-0 ~]$ sudo mv apache-hive-4.0.1-bin.tar.gz /cluster/.
+[vyuksel215@spark-worker-0 ~]$ cd /cluster/
+[vyuksel215@spark-worker-0 cluster]$ ls
+apache-hive-4.0.1-bin.tar.gz  hadoop
+[vyuksel215@spark-worker-0 cluster]$ sudo tar -zxvf apache-hive-4.0.1-bin.tar.gz 
+[vyuksel215@spark-worker-0 cluster]$ sudo rm -rf apache-hive-4.0.1-bin.tar.gz 
+[vyuksel215@spark-worker-0 cluster]$ sudo mv apache-hive-4.0.1-bin hive
+[vyuksel215@spark-worker-0 cluster]$ sudo chown -R hive:hadoop hive/
+
+
+
+sudo su - hive
+
+.bashrc dosyası aşağıdaki gibi düzenlenir, HIVE_HOME eklenir ve PATH değişkenine HIVE komutları eklenir.
+[hive@spark-worker-0 ~]$ vi .bashrc
+
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.462.b08-2.el8.x86_64
+export HADOOP_HOME=/cluster/hadoop
+export HIVE_HOME=/cluster/hive
+export PATH=${PATH}:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${HIVE_HOME}/sbin
+
+
+hive user'ından çıkılır ve mysql kurulur.
+
+[vyuksel215@spark-worker-0 cluster]$ sudo yum install mysql-server
+[vyuksel215@spark-worker-0 cluster]$ sudo systemctl start mysqld
+[vyuksel215@spark-worker-0 cluster]$ sudo mysql_secure_installation -> burda mysql veritabanı root şifresini belirlemek için adımlar var, aşağıdaki gibi sorular yanıtlanır.
+password sorduğu yere welcome1 verilebilir. sonra mysql e bağlanıp hive user ve db oluşturmak için bu password kullanılacak.
+
+Securing the MySQL server deployment.
+
+Connecting to MySQL using a blank password.
+
+VALIDATE PASSWORD COMPONENT can be used to test passwords
+and improve security. It checks the strength of password
+and allows the users to set only those passwords which are
+secure enough. Would you like to setup VALIDATE PASSWORD component?
+
+Press y|Y for Yes, any other key for No: y
+
+There are three levels of password validation policy:
+
+LOW    Length >= 8
+MEDIUM Length >= 8, numeric, mixed case, and special characters
+STRONG Length >= 8, numeric, mixed case, special characters and dictionary                  file
+
+Please enter 0 = LOW, 1 = MEDIUM and 2 = STRONG: 0
+Please set the password for root here.
+
+New password: 
+
+Re-enter new password: 
+
+Estimated strength of the password: 50 
+Do you wish to continue with the password provided?(Press y|Y for Yes, any other key for No) : y
+By default, a MySQL installation has an anonymous user,
+allowing anyone to log into MySQL without having to have
+a user account created for them. This is intended only for
+testing, and to make the installation go a bit smoother.
+You should remove them before moving into a production
+environment.
+
+Remove anonymous users? (Press y|Y for Yes, any other key for No) : y
+Success.
+
+
+Normally, root should only be allowed to connect from
+'localhost'. This ensures that someone cannot guess at
+the root password from the network.
+
+Disallow root login remotely? (Press y|Y for Yes, any other key for No) : y
+Success.
+
+By default, MySQL comes with a database named 'test' that
+anyone can access. This is also intended only for testing,
+and should be removed before moving into a production
+environment.
+
+
+Remove test database and access to it? (Press y|Y for Yes, any other key for No) : n
+
+ ... skipping.
+Reloading the privilege tables will ensure that all changes
+made so far will take effect immediately.
+
+Reload privilege tables now? (Press y|Y for Yes, any other key for No) : y
+Success.
+
+All done! 
+***********************************
+
+Mysql'e bağlan aşağıdaki komutları çalıştırarak hive user ve metastore veritabanını oluştur.
+
+[vyuksel215@spark-worker-0 cluster]$ mysql -u root -p
+Enter password: welcome1
+
+
+mysql> CREATE DATABASE metastore;
+
+
+mysql> CREATE USER 'hive'@'%' IDENTIFIED BY 'hivepassword';
+
+
+mysql> GRANT ALL PRIVILEGES ON metastore.* TO 'hive'@'%';
+
+
+mysql> FLUSH PRIVILEGES;
+
+
+mysql> exit
+
+
+sudo su - hive ile hive user'a geçilir aşağıdaki işlemler yapılır
+
+[hive@spark-worker-0 ~]$ wget https://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-8.0.28.tar.gz
+[hive@spark-worker-0 ~]$ tar -xvzf mysql-connector-java-8.0.28.tar.gz
+[hive@spark-worker-0 ~]$ cp -r mysql-connector-java-8.0.28/mysql-connector-java-8.0.28.jar /cluster/hive/lib/
+
+
+hadoop user ile hive icin gerekli hdfs dizinleri oluştur
+[vyuksel215@spark-worker-0 cluster]$ sudo su - hadoop
+Last login: Wed Jul 23 18:49:48 UTC 2025 on pts/0
+Last failed login: Thu Jul 24 12:32:51 UTC 2025 from 206.189.105.232 on ssh:notty
+There were 18 failed login attempts since the last successful login.
+[hadoop@spark-worker-0 ~]$ hdfs dfs -mkdir -p /user/hive/warehouse
+[hadoop@spark-worker-0 ~]$ hdfs dfs -mkdir /tmp
+mkdir: `/tmp': File exists
+[hadoop@spark-worker-0 ~]$ hdfs dfs -chmod -R 777 /user/hive/warehouse /tmp
+[hadoop@spark-worker-0 ~]$ hdfs dfs -chown -R hive:hadoop /user/hive
+
+*****
+
+hive user'a geçip aşağıda gösterilecek parametreler hive-site.xml dosyasında düzenlenir.
+hive-site dosyası dizinde yok ise cp hive-site-template.xml hive-site.xml dosyasından kopyalanabilir.
+en garanti yol githud'daki hive-site.xml 'i alıp /cluster/hive/conf dizinine koymaktır. P
+
+
+
+[vyuksel215@spark-worker-0 cluster]$ sudo su - hive
+Last login: Thu Jul 24 12:21:40 UTC 2025 on pts/0
+[hive@spark-worker-0 ~]$ cd /cluster/hive/conf/
+[hive@spark-worker-0 conf]$ ls -l
+total 440
+-rw-r--r--. 1 hive hadoop   1775 Sep 25  2024 beeline-log4j2.properties.template
+-rw-r--r--. 1 hive hadoop 413313 Sep 25  2024 hive-default.xml.template
+-rw-r--r--. 1 hive hadoop   2365 Sep 25  2024 hive-env.sh.template
+-rw-r--r--. 1 hive hadoop   2274 Sep 25  2024 hive-exec-log4j2.properties.template
+-rw-r--r--. 1 hive hadoop   3086 Sep 25  2024 hive-log4j2.properties.template
+-rw-r--r--. 1 hive hadoop   2060 Sep 25  2024 ivysettings.xml
+-rw-r--r--. 1 hive hadoop   3558 Sep 25  2024 llap-cli-log4j2.properties.template
+-rw-r--r--. 1 hive hadoop   7093 Sep 25  2024 llap-daemon-log4j2.properties.template
+-rw-r--r--. 1 hive hadoop   2662 Sep 25  2024 parquet-logging.properties
+
+hive-site parametreleri şunlardır
+
+javax.jdo.option.ConnectionURL  -> bu metastore db urli gösterir
+    jdbc:mysql://localhost:3306/hive_metastore?createDatabaseIfNotExist=true
+  
+  
+    javax.jdo.option.ConnectionDriverName -> bu kullanılacak db type göre metastore driverı işaret eder
+    com.mysql.cj.jdbc.Driver
+  
+  
+    javax.jdo.option.ConnectionUserName -> hive için mysqlde oluşturduğumuz user adı
+    hive
+  
+  
+    javax.jdo.option.ConnectionPassword -> hive için mysqlde oluşturduğumuz user passwordü
+    hivepassword
+  
+  
+    hive.metastore.uris  -> metastore'un url'i
+    thrift://localhost:9083
+  
+  
+    hive.metastore.warehouse.dir -> hive'ın hdfsde kullanacağı directory adı.
+    /user/hive/warehouse
+
+
+******
+
+
+daha sonra hive user'ı ile schematool ile metastore kurulumu yapılır.
+
+[hive@spark-worker-0 ~]$ schematool -dbType mysql -initSchema
+[hive@spark-worker-0 ~]$ schematool -dbType mysql -info
+
+
+
+ve metastore ve hive servisleri sırayla başlatılır.
+
+Start Metastore:
+[hive@spark-worker-0 ~]$ hive --service metastore &
+Start HiveServer2:
+[hive@spark-worker-0 ~]$ hive --service hiveserver2 &
+
+
+Servisler başarılı başladı ise aşağıdaki portların aktif olması gerekir. komutlar bu portları dönmez ise sorun vardır.
+[hive@spark-worker-0 ~]$ netstat -tuln | grep 9083
+tcp6       0      0 :::9083                :::*                    LISTEN 
+
+[hive@spark-worker-0 ~]$ netstat -tuln | grep 10000
+tcp6       0      0 :::10000                :::*                    LISTEN 
+
+
+HIVE create table testi
+
+[hive@spark-worker-0 ~]$  beeline -u jdbc:hive2://localhost:10000 -n hive
+
+0: jdbc:hive2://localhost:10000> CREATE TABLE test (id INT, name STRING) STORED AS ORC;
+0: jdbc:hive2://localhost:10000> INSERT INTO test VALUES (1, 'TestUser');
+0: jdbc:hive2://localhost:10000> SELECT * FROM test;
++----------+------------+
+| test.id  | test.name  |
++----------+------------+
+| 1        | TestUser   |
++----------+------------+
+
+
+hdfste dosya var mı kontrol edilir.
+[hive@spark-worker-0 ~]$ hdfs dfs -ls /user/hive/warehouse/test
+Found 1 items
+-rw-r--r--   3 hive hadoop        323 2025-07-24 13:02 /user/hive/warehouse/test/000000_0
+
+
+
+
+
+
+Olası Sorun - Hive user hadoopa bağlanamaz ise;
+
+Resolution
+As a workaround, please follow the below steps :
+ 
+1) Set "hadoop.proxyuser.hive.hosts" to *
+ 
+Ambari > HDFS > configs > hadoop.proxyuser.hive.hosts=*
+ 
+Save the changes and Restart the required services
+ 
+(Or)
+ 
+2) Set "hive.metastore.event.db.notification.api.auth" to false 
+ 
+Ambari > Hive > Configs > Custom hive-site.xml, add the following:
+ 
+hive.metastore.event.db.notification.api.auth=false
+ 
+Save the changes and Restart the required services
