@@ -1,0 +1,114 @@
+
+
+Clusterdaki 3 Node'a da tez kurulur
+[vyuksel215@spark-worker-0 cluster] wget https://dlcdn.apache.org/tez/0.10.3/apache-tez-0.10.3-bin.tar.gz
+[vyuksel215@spark-worker-0 cluster] tar -xzvf apache-tez-0.10.3-bin.tar.gz
+[vyuksel215@spark-worker-0 cluster] cd apache-tez-0.10.3-bin
+[vyuksel215@spark-worker-0 cluster] tar zcvf ../apache-tez-0.10.3-bin.tar.gz * && cd ..
+[vyuksel215@spark-worker-0 cluster] sudo chown -R hive:hadoop apache-tez-0.10.3-bin
+
+
+1 node'dan yapılır ----------
+sonra herhangi bir node'da hadoop kullanıcısına geçip hdfs üzerinde aşağıdaki dizin oluşturulur
+
+hdfs dfs -mkdir -p /apps/tez 
+
+ve hive kullanıcısı için  yetkiler ayarlanır.
+hdfs dfs -chown -R hive:hadoop /apps
+hdfs dfs -ls /
+hdfs dfs -chmod -R 777 /apps
+
+sonra aşağıdaki gibi bu dizinlere tez dosyaları kopyalanır
+
+[hive@spark-worker-0 conf]$ cd /cluster/
+[hive@spark-worker-0 cluster]$ ls
+apache-tez-0.10.3-bin  apache-tez-0.10.3-bin.tar.gz  hadoop  hive
+[hive@spark-worker-0 cluster]$ 
+[hive@spark-worker-0 cluster]$ hdfs dfs -put apache-tez-0.10.3-bin.tar.gz /apps/tez # copy the tarball
+[hive@spark-worker-0 cluster]$ hdfs dfs -put apache-tez-0.10.3-bin /apps/tez # copy the whole folder
+------------------------------------------------------------------------------------
+3 sunucuda da hadoop-env.sh dosyasının sonuna aşağıdaki satırlar eklenir.
+
+export TEZ_CONF_DIR=/cluster/apache-tez-0.10.3-bin/conf
+export TEZ_JARS=/cluster/apache-tez-0.10.3-bin
+export HADOOP_CLASSPATH=${TEZ_CONF_DIR}:${TEZ_JARS}/*:${TEZ_JARS}/lib/*:${HADOOP_CLASSPATH}:
+${JAVA_JDBC_LIBS}:${MAPREDUCE_LIBS}
+
+------------------------------------------------
+sonra 3 sunucuda da hive kullanıcısının .bashrc dizinine aşağıdaki değişkenler eklenir
+
+export TEZ_HOME=/cluster/apache-tez-0.10.3-bin
+export HADOOP_CLASSPATH=$TEZ_HOME/*:$TEZ_HOME/conf
+export TEZ_CONF_DIR=/cluster/apache-tez-0.10.3-bin/conf
+export TEZ_JARS=/cluster/apache-tez-0.10.3-bin
+export HIVE_AUX_JARS_PATH=/cluster/apache-tez-0.10.3-bin/tez-runtime-internals-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-yarn-timeline-history-with-fs-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-protobuf-history-plugin-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-common-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-javadoc-tools-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-job-analyzer-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-api-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-mapreduce-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/hadoop-shim-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-yarn-timeline-history-with-acls-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-yarn-timeline-cache-plugin-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-examples-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-build-tools-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-tests-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-yarn-timeline-history-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-runtime-library-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/lib/commons-io-2.8.0.jar:/cluster/apache-tez-0.10.3-bin/lib/slf4j-api-1.7.36.jar:/cluster/apache-tez-0.10.3-bin/lib/slf4j-reload4j-1.7.36.jar:/cluster/apache-tez-0.10.3-bin/lib/hadoop-mapreduce-client-common-3.3.6.jar:/cluster/apache-tez-0.10.3-bin/lib/jersey-client-1.19.jar:/cluster/apache-tez-0.10.3-bin/lib/commons-collections4-4.4.jar:/cluster/apache-tez-0.10.3-bin/lib/javax.servlet-api-3.1.0.jar:/cluster/apache-tez-0.10.3-bin/lib/commons-cli-1.2.jar:/cluster/apache-tez-0.10.3-bin/lib/netty-all-4.1.94.Final.jar:/cluster/apache-tez-0.10.3-bin/lib/hadoop-hdfs-client-3.3.6.jar:/cluster/apache-tez-0.10.3-bin/lib/jersey-json-1.19.jar:/cluster/apache-tez-0.10.3-bin/lib/guava-32.0.1-jre.jar:/cluster/apache-tez-0.10.3-bin/lib/commons-codec-1.15.jar:/cluster/apache-tez-0.10.3-bin/lib/hadoop-mapreduce-client-core-3.3.6.jar:/cluster/apache-tez-0.10.3-bin/lib/jettison-1.5.4.jar:/cluster/apache-tez-0.10.3-bin/lib/protobuf-java-3.21.1.jar:/cluster/apache-tez-0.10.3-bin/lib/RoaringBitmap-0.7.45.jar:/cluster/apache-tez-0.10.3-bin/lib/async-http-client-2.12.3.jar:/cluster/apache-tez-0.10.3-bin/lib/commons-lang-2.6.jar:/cluster/apache-tez-0.10.3-bin/lib/hadoop-yarn-server-timeline-pluginstorage-3.3.6.jar:/cluster/apache-tez-0.10.3-bin/lib/jsr305-3.0.0.jar:/cluster/apache-tez-0.10.3-bin/lib/metrics-core-3.1.0.jar:/cluster/apache-tez-0.10.3-bin/tez-dag-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/hadoop-shim-2.8-0.10.3.jar:/cluster/apache-tez-0.10.3-bin/tez-history-parser-0.10.3.ja
+
+
+-----------------------------------------------------
+3 sunucuda da /cluster/apache-tez-0.10.3-bin/conf/ dizini altında bir tez-site.xml dosyası oluşturulur ve içeriğine aşağıdaki konfigürasyonlar eklenir
+
+[hive@spark-worker-0 ~]$ cd /cluster/apache-tez-0.10.3-bin/conf/
+[hive@spark-worker-0 conf]$ cat tez-site.xml 
+<configuration>
+    <property>
+        <name>tez.lib.uris</name>
+        <value>hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin.tar.gz,hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin/lib,hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin</value>
+    </property>
+     <property>
+    <name>tez.use.cluster.hadoop-libs</name>
+    <value>true</value>
+  </property>
+</configuration>
+
+
+------------------------------------------------
+
+sadece hive node'unda (worker-0)hive-site.xml dosyasında aşağıdaki değişiklikler yapılır.
+
+
+Property---------------	Value
+
+hive.execution.engine	tez
+
+tez.lib.uris	hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin.tar.gz,hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin/lib,hdfs://spark-master:9000/apps/tez/apache-tez-0.10.3-bin
+
+hive.tez.container.size	1024
+
+hive.tez.java.opts	-Xmx768m
+
+hive.prewarm.enabled	true
+
+hive.prewarm.numcontainers	2
+
+
+------------------
+tüm hadoop servisleri stop - start edilir.
+
+sonra hive kurulan - worker-0 node'undan hive servisleri 
+stop start edilir.
+
+
+pkill -f HiveServer2 -> hive'ı stop eder
+hive --service hiveserver2&
+
+beeline -u jdbc:hive2://localhost:10000 -n hive
+
+Not: hive başlamaz ise loglarını hangi dizine yazacağını export ile verip servisi tekrar çalıştırarak logları okuyabiliriz
+
+
+export HADOOP_CLIENT_OPTS="-Dhive.log.dir=/cluster/hive/logs"
+
+
+
+-----
+
+
+
+
+
+
+
+
+
+
+
