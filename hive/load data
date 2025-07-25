@@ -1,0 +1,58 @@
+Örnek sales.csv dosyası 
+
+sale_id,customer_id,amount,sale_date
+1,101,49.99,2025-05-20
+2,102,29.99,2025-05-21
+3,103,99.99,2025-06-01
+4,104,150.00,2025-06-02
+5,105,75.50,2025-06-05
+6,106,120.00,2025-06-07
+7,107,45.00,2025-06-10
+8,108,80.25,2025-06-12
+9,109,200.99,2025-06-15
+10,110,60.00,2025-06-18
+
+
+-------------
+
+Eğer LOAD DATA LOCAL INPATH kullanacaksan:
+
+# Hive komut satırı örneği:
+LOAD DATA LOCAL INPATH '/home/hadoop/sales.csv' INTO TABLE sales PARTITION (year='2025');
+Bu durumda dosyayı Hive'ın çalıştığı sunucudaki şu dizine koymalısın:
+
+/home/hadoop/sales.csv
+
+Eğer HDFS üzerinden yükleyeceksen:
+
+hdfs dfs -mkdir -p /user/hive/warehouse/tmp/
+hdfs dfs -put /home/hadoop/sales.csv /user/hive/warehouse/tmp/
+
+Ve ardından Hive'da:
+
+LOAD DATA INPATH '/user/hive/warehouse/tmp/sales.csv' INTO TABLE sales PARTITION (year='2025');
+
+
+----------------------------
+sales.csv dosyasına uygun olacak şekilde Hive'da bir partitioned managed table oluşturmak için aşağıdaki CREATE TABLE komutunu kullanabilirsin:
+
+CREATE TABLE Komutu--
+
+
+CREATE TABLE sales (
+    sale_id INT,
+    customer_id INT,
+    amount DECIMAL(10,2),
+    sale_date STRING
+)
+PARTITIONED BY (year STRING)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+-----------------------------------------
+LOAD DATA LOCAL INPATH '/home/hadoop/sales.csv'
+INTO TABLE sales
+PARTITION (year='2025');
+
+
