@@ -1,0 +1,91 @@
+1. Execution Engine: Tez veya Spark kullanın
+
+Hive varsayılan olarak MR (MapReduce) kullanır ama bu çok yavaştır.
+Tez ya da Spark motoru çok daha hızlıdır.
+SET hive.execution.engine=tez;
+
+
+
+2. Cost-Based Optimizer (CBO) Aktif Edin
+
+CBO, sorgunun en verimli yolunu belirler.
+
+SET hive.cbo.enable=true;
+SET hive.stats.fetch.column.stats=true;
+SET hive.stats.fetch.partition.stats=true;
+NOT: CBO etkili çalışması için tabloda ANALYZE TABLE ile istatistikler toplanmış olmalı.
+ANALYZE TABLE sales COMPUTE STATISTICS;
+ANALYZE TABLE sales PARTITION(year) COMPUTE STATISTICS;
+
+
+3. Veri Formatı: ORC, Parquet gibi columnar formatlar kullanın
+
+Text/CSV yavaştır, ORC ise daha sıkıştırılmış ve hızlıdır.
+STORED AS ORC;
+ORC, predicate pushdown ve compression (ZLIB/SNAPPY) ile okuma/yazmayı hızlandırır.
+
+
+4. Partitioning ve Bucketing Kullanın
+
+Büyük tablolarda partitioning sorgu alanını daraltır:
+PARTITIONED BY (year STRING)
+Bucketing ise join işlemlerinde performansı iyileştirir:
+CLUSTERED BY (customer_id) INTO 8 BUCKETS;
+Bucketing için hive.enforce.bucketing=true set edilmelidir.
+
+
+
+5. Vectorized Execution Açın
+
+CPU cache'e uygun çalışır, sorguları daha hızlı işler.
+SET hive.vectorized.execution.enabled=true;
+SET hive.vectorized.execution.reduce.enabled=true;
+
+
+6. Compression (Sıkıştırma) Kullanın
+
+Sıkıştırma, HDFS alanından tasarruf sağlar ve I/O’yu azaltır:
+
+SET hive.exec.compress.output=true;
+SET mapreduce.output.fileoutputformat.compress=true;
+SET mapreduce.output.fileoutputformat.compress.codec=org.apache.hadoop.io.compress.SnappyCodec;
+
+
+7. Join Türünü Optimize Edin
+
+Küçük tabloyu belleğe alıp büyük tabloyla join:
+SET hive.auto.convert.join=true;
+Alternatif: mapjoin
+SELECT /*+ MAPJOIN(small_table) */ ...
+
+
+8. Sorgu Planı İncelemesi
+
+Aşağıdaki komutla sorgunun nasıl çalıştığını analiz edebilirsin:
+
+EXPLAIN SELECT ...;
+
+
+
+9. Geçici Tablolar İçin TEMPORARY TABLE Kullan
+
+Bellekte çalışır, daha hızlıdır:
+
+CREATE TEMPORARY TABLE temp_result AS SELECT ...;
+
+
+10. Resource Ayarlarını Doğru Yap
+
+Tez için container boyutları önemlidir:
+
+tez.task.resource.memory.mb=2048
+tez.task.resource.cpu.vcores=1
+tez.am.resource.memory.mb=4096
+tez.am.resource.cpu.vcores=2
+tez-site.xml içinde ya da SET komutlarıyla override edilebilir.
+
+
+11. Metastore'la İlgili İyileştirmeler
+
+Metastore veritabanı olarak MySQL/PostgreSQL gibi RDBMS kullanın.
+hive.metastore.client.socket.timeout, connection.pool.size gibi ayarlarla optimize edilebilir
