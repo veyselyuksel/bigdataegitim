@@ -1,0 +1,41 @@
+CREATE TABLE customers (
+    customer_id INT,
+    name STRING,
+    city STRING
+)
+STORED AS ORC;
+
+CREATE TABLE sales (
+    sale_id INT,
+    customer_id INT,
+    amount DECIMAL(10,2),
+    sale_date STRING
+)
+PARTITIONED BY (year STRING)
+STORED AS ORC;
+
+-- Insert sample data
+INSERT INTO customers VALUES (101, 'Alice', 'New York'), (102, 'Bob', 'London');
+INSERT INTO sales PARTITION (year='2025')
+VALUES (1, 101, 49.99, '2025-05-20'), (2, 102, 29.99, '2025-05-21');
+
+--- query table 
+
+SELECT c.customer_id, c.name, SUM(s.amount) AS total_spent
+FROM customers c
+JOIN sales s
+ON c.customer_id = s.customer_id
+WHERE s.year = '2025'
+GROUP BY c.customer_id, c.name;
+
+
+----check query plan
+
+EXPLAIN
+SELECT c.customer_id, c.name, SUM(s.amount) AS total_spent
+FROM customers c
+JOIN sales s
+ON c.customer_id = s.customer_id
+WHERE s.year = '2025'
+GROUP BY c.customer_id, c.name;
+
