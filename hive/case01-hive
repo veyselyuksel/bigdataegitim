@@ -1,0 +1,65 @@
+CSV Dosyası: orders.csv
+order_id,customer_id,product_id,quantity,price,order_date,region
+1,101,501,2,25.00,2025-07-01,East
+2,102,502,1,99.99,2025-07-01,West
+3,101,503,3,15.00,2025-07-02,East
+4,103,504,1,49.99,2025-07-02,South
+5,104,501,2,25.00,2025-07-03,North
+6,105,505,4,10.00,2025-07-03,West
+7,101,506,1,199.99,2025-07-04,East
+8,102,503,2,15.00,2025-07-04,West
+9,106,507,1,75.00,2025-07-05,South
+10,104,508,3,20.00,2025-07-05,North
+
+
+  
+1) Hive DDL – Tablo Oluşturma
+
+CREATE DATABASE IF NOT EXISTS ecommerce;
+
+USE ecommerce;
+
+CREATE TABLE orders (
+    order_id INT,
+    customer_id INT,
+    product_id INT,
+    quantity INT,
+    price DECIMAL(10,2),
+    order_date STRING,
+    region STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+STORED AS TEXTFILE;
+
+
+2) DML – Verileri Yükleme
+
+Önce orders.csv dosyasını HDFS'e yükleyin:
+
+hdfs dfs -mkdir -p /user/hive/data/orders
+hdfs dfs -put orders.csv /user/hive/data/orders/
+
+  
+3) Veriyi Hive tablosuna yükleyin:
+
+LOAD DATA INPATH '/user/hive/data/orders/orders.csv'
+OVERWRITE INTO TABLE orders;
+
+
+Sorgu Örnekleri
+
+1. En çok sipariş veren müşteri kim?
+SELECT customer_id, COUNT(*) AS total_orders
+FROM orders
+GROUP BY customer_id
+ORDER BY total_orders DESC;
+
+2. Toplam satış miktarını bölgelere göre hesaplayın:
+SELECT region, SUM(quantity * price) AS total_sales
+FROM orders
+GROUP BY region;
+
+3. Siparişleri tarihe göre sıralayın:
+SELECT * FROM orders
+ORDER BY order_date;
