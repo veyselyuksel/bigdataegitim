@@ -68,6 +68,12 @@ export HIVE_AUX_JARS_PATH=/cluster/apache-tez-0.10.3-bin/tez-runtime-internals-0
 ------------------------------------------------
 
 sadece hive node'unda (worker-0)hive-site.xml dosyasında aşağıdaki değişiklikler yapılır.
+/cluster/hive/conf dizinine gilidir ve hive-site.xml indirilir,
+[hive@spark-worker-0 conf]$ wget https://github.com/veyselyuksel/bigdataegitim/blob/main/hive/hive_site_TEZ.xml
+
+mv hive_site_TEZ.xml hive-site.xml
+ls -l 
+chown -R hive:hadoop *
 
 
 Property---------------	Value
