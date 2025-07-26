@@ -37,6 +37,10 @@ ${JAVA_JDBC_LIBS}:${MAPREDUCE_LIBS}
 ------------------------------------------------
 sonra 3 sunucuda da hive kullanıcısının .bashrc dizinine aşağıdaki değişkenler eklenir
 
+export JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.462.b08-2.el8.x86_64
+export HADOOP_HOME=/cluster/hadoop
+export HIVE_HOME=/cluster/hive
+export PATH=${PATH}:${HADOOP_HOME}/bin:${HADOOP_HOME}/sbin:${HIVE_HOME}/bin:${HIVE_HOME}/sbin
 export TEZ_HOME=/cluster/apache-tez-0.10.3-bin
 export HADOOP_CLASSPATH=$TEZ_HOME/*:$TEZ_HOME/conf
 export TEZ_CONF_DIR=/cluster/apache-tez-0.10.3-bin/conf
