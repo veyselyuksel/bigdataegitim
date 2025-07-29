@@ -139,3 +139,30 @@ spark-worker-0   Ready      <none>          19s     v1.30.14
 spark-worker-1   NotReady   <none>          6s      v1.30.14
 
 
+
+
+
+
+cluster durumuna bak
+kubectl cluster-info
+
+node'ları listele
+kubectl get nodes -o wide
+
+namespace'leri listele
+kubectl get namespaces
+
+tüm podları gör
+kubectl get pods --all-namespaces -o wide
+
+kube-system namespace'indeki bileşenlere bak
+kubectl get pods -n kube-system -o wide
+
+system namespace'indeki kaynakları listele
+kubectl get all -n kube-system
+
+bir pod'un detaylarını incele
+kubectl describe pod <pod-ismi> -n <namespace>
+
+pod loglarını oku
+kubectl logs <pod-ismi> -n <namespace>
