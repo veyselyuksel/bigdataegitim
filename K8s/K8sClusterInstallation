@@ -1,0 +1,141 @@
+K8s CLuster Kurulumu
+
+1 master 2 worker node ile K8s cluster kurulumu
+
+1) vi ile prereq.sh adında bir sh dosyası oluşturulur.
+- 3 node'da da çalıştırılır.
+
+#!/bin/bash
+
+set -e
+
+echo "[INFO] Disabling swap..."
+sudo swapoff -a
+sudo sed -i '/ swap / s/^/#/' /etc/fstab
+
+echo "[INFO] Disabling SELinux..."
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+
+echo "[INFO] Loading br_netfilter kernel module..."
+sudo modprobe br_netfilter
+
+echo "[INFO] Adding kernel sysctl settings for Kubernetes..."
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+sudo tee -a /etc/sysctl.d/99-kubernetes-ipforward.conf <<EOF
+net.ipv4.ip_forward = 1
+EOF
+sudo systemctl stop firewalld
+sudo systemctl disable firewalld
+echo -e "overlay\nbr_netfilter" | sudo tee /etc/modules-load.d/k8s.conf > /dev/null
+sudo modprobe overlay
+sudo modprobe br_netfilter
+echo "[INFO] Applying sysctl settings..."
+sudo sysctl --system
+
+echo "[INFO] Setup complete. Please reboot the system manually if needed."
+
+--------------------------------------------
+2) Oluşturulan sh 3 sunucuda da chmod a+x prereq.sh komutu ile yetkilendirildikten sonra  sudo ./prereq komutu ile çalıştırılır.
+
+3) Containerd kurulumu
+
+   1. Gerekli bağımlılıkları kur
+sudo dnf install -y yum-utils device-mapper-persistent-data lvm2
+   2. Docker resmi reposunu ekle (çünkü containerd burada var)
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+Bu repo RHEL 8 ile de uyumludur çünkü RHEL 8, CentOS 8 ile binary düzeyde oldukça benzerdir.
+   3. containerd.io paketini kur
+sudo dnf install -y containerd.io
+   4. Varsayılan yapılandırmayı oluştur ve servis başlat
+sudo mkdir -p /etc/containerd
+containerd config default | sudo tee /etc/containerd/config.toml
+sudo systemctl enable --now containerd
+   5. SystemdCgroup = true olarak değiştir (Kubernetes için önerilir)
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+sudo systemctl restart containerd
+  
+Kontrol
+
+containerd --version
+
+
+4. Tüm Node’larda Kubernetes Kurulumu
+
+  4.1 Kubernetes repo ekle
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
+EOF
+
+  4.2 kubelet, kubeadm, kubectl yükle
+sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+sudo systemctl enable --now kubelet
+
+5) sadece Master Node'da komutu çalıştır ve çıktısını sakla.
+sudo kubeadm init --pod-network-cidr=10.128.0.0/16
+
+Çıktıdaki kubeadm join komutunu al.
+
+Your Kubernetes control-plane has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+Alternatively, if you are the root user, you can run:
+
+  export KUBECONFIG=/etc/kubernetes/admin.conf
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+Then you can join any number of worker nodes by running the following on each as root:
+
+kubeadm join 10.128.0.10:6443 --token glktby.63m2mq59ewnwtwqi \
+	--discovery-token-ca-cert-hash sha256:bf419fb326221627e7e16dc1c51b8908500b5ba52ba0b503172ad61ccab7833f 
+
+
+5) Master node’da kubectl erişimini ayarla:
+mkdir -p $HOME/.kube
+sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+
+6)Pod Network (CNI) Yükle — Flannel
+
+Yine sadece master node’da çalıştırılır:
+wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+kubectl apply -f kube-flannel.yml
+kubectl get pods -n kube-flannel -w
+
+
+
+
+
+7) worker node'larda aşağıdaki komut çalıştırılır. ve clustera workerlar katılır.
+
+sudo kubeadm join 10.128.0.10:6443 --token glktby.63m2mq59ewnwtwqi \
+  --discovery-token-ca-cert-hash sha256:bf419fb326221627e7e16dc1c51b8908500b5ba52ba0b503172ad61ccab7833f
+
+
+  8)[vyuksel215@spark-master ~]$ kubectl get nodes
+NAME             STATUS     ROLES           AGE     VERSION
+spark-master     Ready      control-plane   8m23s   v1.30.14
+spark-worker-0   Ready      <none>          19s     v1.30.14
+spark-worker-1   NotReady   <none>          6s      v1.30.14
+
+
