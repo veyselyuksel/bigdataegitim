@@ -83,7 +83,7 @@ sudo dnf install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 sudo systemctl enable --now kubelet
 
 5) sadece Master Node'da komutu çalıştır ve çıktısını sakla.
-sudo kubeadm init --pod-network-cidr=10.128.0.0/16
+sudo kubeadm init --pod-network-cidr=10.127.0.0/16
 
 Çıktıdaki kubeadm join komutunu al.
 
