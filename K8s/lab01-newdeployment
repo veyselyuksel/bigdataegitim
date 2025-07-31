@@ -1,0 +1,213 @@
+
+✅ Yeni namespace oluşturma
+✅ PersistentVolume ve PersistentVolumeClaim kullanımı
+✅ Secret ile şifre yönetimi
+✅ PostgreSQL deploy etme (replica'lı)
+✅ Replicaset avantajını gösterme
+✅ Pod yönetimi (scale, delete, logs, exec vs.)
+✅ kubectl komutları ile temel operasyonlar
+
+1) Yeni Namespace Oluştur
+
+kubectl create namespace pgdemo
+kubectl get namespaces
+
+
+2) PostgreSQL Secret Oluştur (pg-secret.yaml)
+
+mkdir pgdemo
+cd pgdemo -> bütün yaml dosyalarını bu directory'de oluşturacağız.
+vi pg-secret.yaml 
+
+Aşağıdaki yaml içeriği bu dosyaya kopyalanır.
+----
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-secret
+  namespace: pgdemo
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: mysecretpassword
+----
+
+kubectl apply -f pg-secret.yaml  
+
+3) PVC tanımı
+
+
+Öncelikle storageclass'ı kontrol etmek gerekir. standart default ise PV oluşturmadan PCV tanımı direkt yapılabilir.
+
+vi pg-pv.yaml
+
+3.1) 
+__
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pg-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: manual
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /mnt/data/postgres
+--
+
+3 sunucuda da aşağıdaki directory'ler oluşturulmalıdır.
+sudo mkdir -p /mnt/data/postgres
+sudo chmod 777 /mnt/data/postgres
+kubectl apply -f pg-pv.yaml
+
+
+3.2)
+
+vi pg-pvc.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-pvc
+  namespace: pgdemo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard   # ← Kendi ortamına göre değiştir! (Yani standart değil ise 3.1 adımını uyguladı isen buranın değerini "storageClassName: manual" oarak güncelle )
+---
+
+
+kubectl apply -f pg-pvc.yaml
+
+
+3.3) 
+kubectl get pv
+kubectl get pvc -n pgdemo
+
+4) Postgresql deployment'ı oluştur
+
+vi pg-deployment.yaml
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deploy
+  namespace: pgdemo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pg-secret
+              key: POSTGRES_PASSWORD
+        volumeMounts:
+        - name: pg-data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: pg-data
+        persistentVolumeClaim:
+          claimName: pg-pvc
+----
+
+kubectl apply -f pg-deployment.yaml
+
+
+5) Service Tanımı
+
+
+vi pg-service.yaml
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: pgdemo
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+---
+
+kubectl apply -f pg-service.yaml
+kubectl get svc
+kubectl get svc -n pgdemo
+
+
+
+6) Komutlar
+
+kubectl get all -n pgdemo           #bir namespace'deki (pgdemo) herşeyin durumunu gösterir.
+kubectl get pods -n pgdemo -o wide 
+kubectl describe deployment postgres-deploy -n pgdemo
+
+kubectl scale deployment postgres-deploy --replicas=3 -n pgdemo
+
+kubectl get pods -n pgdemo
+kubectl delete pod <pod-name> -n pgdemo       # otomatik yeniden yaratılır
+kubectl logs <pod-name> -n pgdemo
+kubectl exec -it <pod-name> -n pgdemo -- bash
+
+
+psql -U postgres                               # bağlanmayı deneyin
+
+
+
+kubectl get pods	-> Temel pod listesi
+kubectl get pods -o wide	-> IP, node, image gibi ek bilgiler
+kubectl describe pod	-> Tüm detaylar (env, mounts vs.)
+
+
+
+
+7) PostgreSQL NodePort Servisi (pg-nodeport-svc.yaml) 
+
+
+vi pg-nodeport-svc.yaml
+
+-----
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-nodeport
+  namespace: pgdemo
+spec:
+  type: NodePort
+  selector:
+    app: postgres
+  ports:
+    - port: 5432              # Cluster içi port
+      targetPort: 5432        # Container içindeki port
+      nodePort: 30032         # Dışarıdan erişeceğimiz port (range: 30000–32767)
+----
+
+pg-nodeport-svc.yaml
+
+kubectl get nodes -o wide
+
+
+
+
