@@ -1,0 +1,36 @@
+1- Helm yüklenir ve versiyonu kontrol edilir.
+
+[veritabaniegitimleri@spark-master spark]$ curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+[veritabaniegitimleri@spark-master spark]$ helm version
+
+version.BuildInfo{Version:"v3.18.4", GitCommit:"d80839cf37d860c8aa9a0503fe463278f26cd5e2", GitTreeState:"clean", GoVersion:"go1.24.4"}
+
+
+2- Bitnami Spark Helm Chart Reposunu Ekle
+[veritabaniegitimleri@spark-master spark]$ helm repo add bitnami https://charts.bitnami.com/bitnami
+[veritabaniegitimleri@spark-master spark]$ helm repo update
+
+3- Spark Helm Chart ile Kurulum
+Aşağıdaki komutla Spark Master + 2 Worker pod'u kurulur ve Master Web UI için NodePort açılır:
+[veritabaniegitimleri@spark-master spark]$  helm install spark-release bitnami/spark \
+  --namespace spark \
+  --create-namespace \
+  --set master.service.type=NodePort \
+  --set worker.replicas=2
+
+Bu komut:
+Namespace: spark oluşturur (yoksa)
+1 Master Pod (spark-release-master-0)
+2 Worker Pod (spark-release-worker-0, worker-1)
+Web UI ve RPC için servis (spark-release-master-svc)
+NodePort tipi ile dış erişim sağlar
+
+4- Servisi kontrol et, Nodeport değilse aşağıdaki patchi geç
+[veritabaniegitimleri@spark-master spark]$ kubectl patch svc spark-release-master-svc -n spark \
+  -p '{"spec": {"type": "NodePort", "ports":[{"port": 8080, "targetPort": 8080, "nodePort": 30750, "name": "webui"}, {"port": 7077, "targetPort": 7077, "nodePort": 31135, "name": "spark"}]}}'
+
+
+5- Silmek için
+[veritabaniegitimleri@spark-master spark]$ helm uninstall spark-release -n spark
+
+
