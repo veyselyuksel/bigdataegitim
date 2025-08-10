@@ -1,0 +1,127 @@
+# Java 17
+sudo dnf install -y java-17-openjdk java-17-openjdk-devel
+java -version   # 17.x görmelisin
+
+# Python ve pip (yüklü değilse)
+
+[veritabaniegitimleri@spark-master ~]$ sudo dnf install -y python3.12 python3.12-pip
+
+Yeni virtual env oluştur
+[veritabaniegitimleri@spark-master ~]$ python3.12 -m venv ~/venvs/py312
+[veritabaniegitimleri@spark-master ~]$ source ~/venvs/py312/bin/activate
+[veritabaniegitimleri@spark-master ~]$ pip install --upgrade pip
+
+pyspark 4 ü indir
+[veritabaniegitimleri@spark-master ~]$ pip install pyspark==4.0.0
+
+Kontrol et
+[veritabaniegitimleri@spark-master ~]$ python -c "import pyspark; print(pyspark.__version__)"
+4.0.0
+
+
+
+pyspark --master spark://<NODE_IP>:31135
+
+
+
+Örnek;
+data = ["big data is powerful", "spark is fast", "spark is scalable"]
+rdd = sc.parallelize(data)
+words = rdd.flatMap(lambda line: line.split(" "))
+word_counts = words.map(lambda w: (w, 1)).reduceByKey(lambda a,b: a+b)
+print(dict(word_counts.collect()))
+
+
+((py312) ) [veritabaniegitimleri@spark-master ~]$ pyspark --master spark://34.67.134.33:31135
+Python 3.12.11 (main, Jun 19 2025, 11:41:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-27)] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+WARNING: Using incubator modules: jdk.incubator.vector
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+25/08/10 14:06:39 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 4.0.0
+      /_/
+
+Using Python version 3.12.11 (main, Jun 19 2025 11:41:33)
+Spark context Web UI available at http://spark-master.us-central1-c.c.bright-lattice-371819.internal:4040
+Spark context available as 'sc' (master = spark://34.67.134.33:31135, app id = app-20250810140641-0002).
+SparkSession available as 'spark'.
+>>> data = ["big data is powerful", "spark is fast", "spark is scalable"]
+>>> rdd = sc.parallelize(data)
+>>> words = rdd.flatMap(lambda line: line.split(" "))
+>>> word_counts = words.map(lambda w: (w, 1)).reduceByKey(lambda a,b: a+b)
+>>> print(dict(word_counts.collect()))
+{'big': 1, 'powerful': 1, 'fast': 1, 'is': 3, 'data': 1, 'spark': 2, 'scalable': 1}
+>>> 
+
+Örnek açıklama
+1. Adım
+data = ["big data is powerful", "spark is fast", "spark is scalable"]
+
+Python tarafında basit bir liste oluşturuyoruz.
+Her eleman bir string → bu, Spark’a girdi olarak vereceğimiz veriler.
+İçerik:
+[
+  "big data is powerful",
+  "spark is fast",
+  "spark is scalable"
+]
+
+2.Adım
+rdd = sc.parallelize(data)
+sc → SparkContext objesi (PySpark başlattığında otomatik gelir).
+parallelize → Python listesini RDD'ye (Resilient Distributed Dataset) çevirir.
+Spark bu listeyi bölerek (partition’lara ayırarak) cluster’daki worker’lara dağıtır.
+3 satır veriyi 2 part’a bölebilir:
+Partition 1: "big data is powerful", "spark is fast"
+Partition 2: "spark is scalable"
+
+
+3.Adım
+words = rdd.flatMap(lambda line: line.split(" "))
+Cümleleri kelimelere bölüyoruz
+flatMap:
+  map gibi çalışır ama liste dönerse düzleştirir (flatten).
+  line.split(" ") → satırdaki kelimeleri ayırır.
+Sonuç:
+["big", "data", "is", "powerful", "spark", "is", "fast", "spark", "is", "scalable"]
+
+4.Adım
+
+word_counts = words.map(lambda w: (w, 1)).reduceByKey(lambda a,b: a+b)
+  map(lambda w: (w, 1))
+  Her kelimeyi (kelime, 1) şeklinde tuple yapar.
+  Örnek:
+("big", 1)
+("data", 1)
+("is", 1)
+...
+  reduceByKey(lambda a,b: a+b)
+  Aynı kelimeler için 1’leri toplar.
+(w, 1) değerlerini anahtara göre (kelimeye göre) birleştirir.
+Örnek:
+("is", 3)
+("spark", 2)
+("big", 1)
+("data", 1)
+
+5.Adım
+print(dict(word_counts.collect()))
+collect() → tüm RDD’yi driver’a geri getirir (liste olarak).
+Örnek:
+[("big", 1), ("data", 1), ("is", 3), ("powerful", 1), ("spark", 2), ("fast", 1), ("scalable", 1)]
+dict(...) → listeyi dictionary’e çevirir.
+Sonuç:
+{'big': 1, 'data': 1, 'is': 3, 'powerful': 1, 'spark': 2, 'fast': 1, 'scalable': 1}
+
+Özet
+Python listesi → RDD
+RDD → kelimelere bölünür
+Kelimeler → (kelime, 1) çiftleri
+reduceByKey ile sayılar toplanır
+collect ile driver’a getirilir ve yazdırılır
