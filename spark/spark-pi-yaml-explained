@@ -1,0 +1,49 @@
+apiVersion: sparkoperator.k8s.io/v1beta2  # Spark Operator CRD sürümü (SparkApplication için)
+kind: SparkApplication                     # Oluşturulan K8s nesnesi tipi
+metadata:
+  name: spark-pi                           # Uygulama adı (kubectl ile bu ad üzerinden izlenir)
+  namespace: spark-jobs                    # Uygulamanın çalışacağı namespace
+spec:
+  type: Scala                              # Uygulamanın dili (Scala/Python/R)
+  mode: cluster                            # Spark "cluster" modu (driver pod olarak kümede çalışır)
+  image: apache/spark:3.5.6                # Driver/Executor pod’ları için Docker imajı
+  imagePullPolicy: IfNotPresent            # Node’da yoksa indir; varsa mevcut imajı kullan
+  sparkVersion: "3.5.6"                    # Spark sürümü (imaj/jar ile uyumlu olmalı)
+  mainClass: org.apache.spark.examples.SparkPi  # Çalıştırılacak ana sınıf
+  mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.5.6.jar"  # İmaj içindeki JAR (local:/// = container dosya sistemi)
+  restartPolicy:
+    type: Never                            # İş bittikten/hatadan sonra operatör yeniden başlatmasın
+
+  driver:
+    serviceAccount: spark                  # Driver pod’unun kullanacağı ServiceAccount (RBAC için)
+    cores: 1                               # Spark driver’ın göreceği çekirdek sayısı (Spark tarafı)
+    coreRequest: "200m"                    # K8s CPU request (scheduler bu kadar CPU ayırır, limit vermedik)
+    memory: "512m"                         # Driver JVM heap (Spark’ın "spark.driver.memory")
+    memoryOverhead: "256m"                 # Container overhead/off-heap (toplam limit ≈ heap+overhead)
+    # control-plane taint toleration (lab için)
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"  # Control-plane taint’ini tolere et
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"         # Eski master taint anahtarı (uyumluluk için)
+        operator: "Exists"
+        effect: "NoSchedule"
+
+  executor:
+    serviceAccount: spark                  # Executor pod’larının kullanacağı ServiceAccount
+    instances: 1                           # Executor sayısı (küçük küme için 1)
+    cores: 1                               # Her executor’ın Spark çekirdek sayısı
+    coreRequest: "200m"                    # K8s CPU request (scheduler için minimum CPU talebi)
+    memory: "512m"                         # Executor heap (spark.executor.memory)
+    memoryOverhead: "256m"                 # Executor container overhead (off-heap, shuffle vb.)
+    # executors sadece worker label'lı node'a yerleşsin
+    nodeSelector:
+      node-role: "worker"                  # Sadece "node-role=worker" label’lı node’lara yerleştir
+    # (gerekirse control-plane toleration da ekli, ama nodeSelector worker'a yönlendirdiği için genelde gerekmez)
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"  # (Opsiyonel) Control-plane taint toleration
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"         # (Opsiyonel) Eski master taint toleration
+        operator: "Exists"
+        effect: "NoSchedule"
