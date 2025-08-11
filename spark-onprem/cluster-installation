@@ -1,0 +1,148 @@
+1-
+spark-master ve spark-worker-0 isimli sunucular üzerine spark kurulum adımları için öncellikle
+/etc/hosts dosyalarına sunucuların IP ve hostname'leri eklenir. IPleri kendi ortamınıza göre değiştirin.
+IP_ADDR spark-master
+IP_ADDR spark-worker-0
+
+2-
+iki sunucuda da aşağıdaki paketler kurulur.
+
+sudo dnf install -y java-17-openjdk-headless openssh-server curl tar java-17-openjdk-devel
+
+3-
+iki sunucuda da spark servislerinin yönetimi için ayrı bir user oluşturulur.
+
+sudo useradd -m spark || true
+sudo passwd spark
+sudo usermod -aG wheel spark
+
+4- 
+spark paketlerinin kurulumu. iki node'da da yapılır.
+[veritabaniegitimleri@spark-master ~]$ SPARK_VER=4.0.0
+[veritabaniegitimleri@spark-master ~]$ PKG=spark-${SPARK_VER}-bin-hadoop3
+[veritabaniegitimleri@spark-master ~]$ cd /opt
+[veritabaniegitimleri@spark-master opt]$ sudo curl -LO https://mirror.kumi.systems/apache/spark/spark-${SPARK_VER}/${PKG}.tgz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100  518M  100  518M    0     0  9184k      0  0:00:57  0:00:57 --:--:-- 10.3M
+[veritabaniegitimleri@spark-master opt]$ sudo tar -xzf ${PKG}.tgz
+[veritabaniegitimleri@spark-master opt]$ sudo ln -sfn ${PKG} spark  
+[veritabaniegitimleri@spark-master opt]$ sudo chown -R spark:spark /opt/${PKG}
+[veritabaniegitimleri@spark-master opt]$ sudo chown -h spark:spark /opt/spark
+[veritabaniegitimleri@spark-master opt]$ sudo su - spark
+[spark@spark-master ~]$ cat <<'EOF' >> ~/.bashrc
+export SPARK_HOME=/opt/spark
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export PATH=$SPARK_HOME/bin:$SPARK_HOME/sbin:$PATH
+EOF
+[spark@spark-master ~]$ source ~/.bashrc
+
+5-
+iki sunucu arasında spark user için passwordless ssh konfigüre edilir.
+Önce iki sunucunun da /etc/ssh/sshd_conf dosyası açılır ve aşağıdaki parametreler gösterildiği gibi yes olarak ayarlanır;(değişiklik sudo yetkili user ile yapılır)
+[veritabaniegitimleri@spark-master opt]$ sudo vi /etc/ssh/sshd_config 
+
+PubkeyAuthentication yes
+PasswordAuthentication yes
+
+[veritabaniegitimleri@spark-master opt]$ sudo systemctl reload sshd
+
+Sonra spark user'a geçilir key oluşturulur ve kopyalanır. Bu adım sadece masterda yapılır.
+[spark@spark-master ~]$ ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+[spark@spark-master ~]$ ssh-copy-id spark-master
+[spark@spark-master ~]$ ssh-copy-id spark-worker-0
+
+test edilir; Sorunsuz şekilde password istemeden aşağıdaki gibi bağlantının sağlanması gerekir.
+[spark@spark-master ~]$ ssh spark@spark-worker-0
+Last login: Mon Aug 11 20:06:39 2025
+[spark@spark-worker-0 ~]$ exit
+logout
+Connection to spark-worker-0 closed.
+
+
+6- 
+Spark masterda konfigürasyon ayarları yapılır.
+
+[spark@spark-master ~]$ cd $SPARK_HOME/conf
+[spark@spark-master conf]$ cp spark-env.sh.template spark-env.sh
+[spark@spark-master conf]$ cp workers.template workers
+[spark@spark-master conf]$ cat <<'EOF' > $SPARK_HOME/conf/spark-env.sh
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export SPARK_MASTER_HOST=spark-master
+export SPARK_MASTER_PORT=7077
+export SPARK_MASTER_WEBUI_PORT=8080
+export SPARK_WORKER_CORES=1
+export SPARK_WORKER_MEMORY=1g
+export SPARK_WORKER_WEBUI_PORT=8081
+EOF
+[spark@spark-master conf]$ echo "spark-worker-0" > $SPARK_HOME/conf/workers
+
+Spark workerda konfigürasyon ayarları yapılır
+[spark@spark-worker-0 ~]$ cd $SPARK_HOME/conf
+[spark@spark-worker-0 conf]$ cp spark-env.sh.template spark-env.sh
+[spark@spark-worker-0 conf]$ cp workers.template workers
+[spark@spark-worker-0 conf]$ cat <<'EOF' > $SPARK_HOME/conf/spark-env.sh
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export SPARK_WORKER_CORES=1
+export SPARK_WORKER_MEMORY=1g
+export SPARK_WORKER_WEBUI_PORT=8081
+EOF
+
+7-
+Spark master üzerinden master ve workers servisleri başlatılır.
+[spark@spark-master conf]$ start-master.sh 
+starting org.apache.spark.deploy.master.Master, logging to /opt/spark/logs/spark-spark-org.apache.spark.deploy.master.Master-1-spark-master.out
+[spark@spark-master conf]$ jps
+20909 Master
+21230 Jps
+
+[spark@spark-master conf]$ start-workers.sh 
+spark-worker-0: starting org.apache.spark.deploy.worker.Worker, logging to /opt/spark/logs/spark-spark-org.apache.spark.deploy.worker.Worker-1-spark-worker-0.out
+
+worker Node'a bağlanılıp spark user ile jps komutu çalıştırılır ve kontroller yapılır.
+
+[spark@spark-worker-0 conf]$ jps
+36674 Worker
+36781 Jps
+
+Daha sonra master node'un external IP'sinden 8080 portu kontrol edilerek web UI'a erişilir.
+
+4.0.0 Spark Master at spark://spark-master:7077
+URL: spark://spark-master:7077
+Workers: 1 Alive, 0 Dead, 0 Decommissioned, 0 Unknown
+Cores in use: 1 Total, 0 Used
+Memory in use: 1024.0 MiB Total, 0.0 B Used
+Resources in use:
+Applications: 0 Running, 0 Completed
+Drivers: 0 Running (0 Waiting), 0 Completed (0 Killed, 0 Failed, 0 Error, 0 Relaunching)
+Status: ALIVE (Environment, Log)
+
+
+
+ÖRNEK uygulama
+
+[spark@spark-master conf]$ EX_JAR=$(ls $SPARK_HOME/examples/jars/spark-examples_*.jar | head -n1)
+[spark@spark-master conf]$ echo $EX_JAR
+/opt/spark/examples/jars/spark-examples_2.13-4.0.0.jar
+[spark@spark-master conf]$ $SPARK_HOME/bin/spark-submit \
+   --master spark://spark-master:7077 \
+   --class org.apache.spark.examples.SparkPi \
+   "$EX_JAR" 20000
+
+
+Spark history server
+9) (Opsiyonel) Spark History Server (bitmiş işlerin UI’ı)
+Neden? Job bittikten sonra bile geçmişi görmek için.
+Event log klasörü:
+sudo mkdir -p /var/spark-events
+sudo chown -R $(whoami) /var/spark-events
+spark-defaults.conf:
+cat <<'EOF' > $SPARK_HOME/conf/spark-defaults.conf
+spark.eventLog.enabled true
+spark.eventLog.dir file:/var/spark-events
+EOF
+History Server’ı aç:
+SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file:/var/spark-events \
+ -Dspark.history.ui.port=18080" \
+$SPARK_HOME/sbin/start-history-server.sh
+Erişim: http://spark-master:18080 (Spark 4 docs genel görünüm/izleme bölümleri) 
