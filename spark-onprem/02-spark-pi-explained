@@ -1,0 +1,165 @@
+[spark@spark-master conf]$ $SPARK_HOME/bin/spark-submit   --master spark://spark-master:7077   --class org.apache.spark.examples.SparkPi   "$EX_JAR" 10
+WARNING: Using incubator modules: jdk.incubator.vector
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+25/08/11 21:06:42 INFO SparkContext: Running Spark version 4.0.0
+25/08/11 21:06:42 INFO SparkContext: OS info Linux, 4.18.0-553.66.1.el8_10.x86_64, amd64
+25/08/11 21:06:42 INFO SparkContext: Java version 17.0.16
+25/08/11 21:06:42 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+25/08/11 21:06:42 INFO ResourceUtils: ==============================================================
+25/08/11 21:06:42 INFO ResourceUtils: No custom resources configured for spark.driver.
+25/08/11 21:06:42 INFO ResourceUtils: ==============================================================
+25/08/11 21:06:42 INFO SparkContext: Submitted application: Spark Pi
+25/08/11 21:06:42 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> name: cpus, amount: 1.0)
+25/08/11 21:06:42 INFO ResourceProfile: Limiting resource is cpu
+25/08/11 21:06:42 INFO ResourceProfileManager: Added ResourceProfile id: 0
+25/08/11 21:06:43 INFO SecurityManager: Changing view acls to: spark
+25/08/11 21:06:43 INFO SecurityManager: Changing modify acls to: spark
+25/08/11 21:06:43 INFO SecurityManager: Changing view acls groups to: spark
+25/08/11 21:06:43 INFO SecurityManager: Changing modify acls groups to: spark
+25/08/11 21:06:43 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: spark groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled
+25/08/11 21:06:43 INFO Utils: Successfully started service 'sparkDriver' on port 32921.
+25/08/11 21:06:43 INFO SparkEnv: Registering MapOutputTracker
+25/08/11 21:06:43 INFO SparkEnv: Registering BlockManagerMaster
+25/08/11 21:06:43 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information
+25/08/11 21:06:43 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up
+25/08/11 21:06:43 INFO SparkEnv: Registering BlockManagerMasterHeartbeat
+25/08/11 21:06:43 INFO DiskBlockManager: Created local directory at /tmp/blockmgr-e52c5845-1478-47ff-a676-d907178e03c4
+25/08/11 21:06:43 INFO SparkEnv: Registering OutputCommitCoordinator
+25/08/11 21:06:44 INFO JettyUtils: Start Jetty 0.0.0.0:4040 for SparkUI
+25/08/11 21:06:44 INFO Utils: Successfully started service 'SparkUI' on port 4040.
+25/08/11 21:06:44 INFO SparkContext: Added JAR file:/opt/spark-4.0.0-bin-hadoop3/examples/jars/spark-examples_2.13-4.0.0.jar at spark://spark-master.us-central1-c.c.bright-lattice-371819.internal:32921/jars/spark-examples_2.13-4.0.0.jar with timestamp 1754946402540
+25/08/11 21:06:44 INFO SecurityManager: Changing view acls to: spark
+25/08/11 21:06:44 INFO SecurityManager: Changing modify acls to: spark
+25/08/11 21:06:44 INFO SecurityManager: Changing view acls groups to: spark
+25/08/11 21:06:44 INFO SecurityManager: Changing modify acls groups to: spark
+25/08/11 21:06:44 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: spark groups with view permissions: EMPTY; users with modify permissions: spark; groups with modify permissions: EMPTY; RPC SSL disabled
+25/08/11 21:06:44 INFO StandaloneAppClient$ClientEndpoint: Connecting to master spark://spark-master:7077...
+25/08/11 21:06:44 INFO TransportClientFactory: Successfully created connection to spark-master/10.128.0.5:7077 after 55 ms (0 ms spent in bootstraps)
+25/08/11 21:06:45 INFO StandaloneSchedulerBackend: Connected to Spark cluster with app ID app-20250811210645-0001
+25/08/11 21:06:45 INFO StandaloneAppClient$ClientEndpoint: Executor added: app-20250811210645-0001/0 on worker-20250811205321-10.128.0.6-46595 (10.128.0.6:46595) with 1 core(s)
+25/08/11 21:06:45 INFO StandaloneSchedulerBackend: Granted executor ID app-20250811210645-0001/0 on hostPort 10.128.0.6:46595 with 1 core(s), 1024.0 MiB RAM
+25/08/11 21:06:45 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 46003.
+25/08/11 21:06:45 INFO NettyBlockTransferService: Server created on spark-master.us-central1-c.c.bright-lattice-371819.internal:46003
+25/08/11 21:06:45 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy
+25/08/11 21:06:45 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, spark-master.us-central1-c.c.bright-lattice-371819.internal, 46003, None)
+25/08/11 21:06:45 INFO BlockManagerMasterEndpoint: Registering block manager spark-master.us-central1-c.c.bright-lattice-371819.internal:46003 with 434.4 MiB RAM, BlockManagerId(driver, spark-master.us-central1-c.c.bright-lattice-371819.internal, 46003, None)
+25/08/11 21:06:45 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, spark-master.us-central1-c.c.bright-lattice-371819.internal, 46003, None)
+25/08/11 21:06:45 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, spark-master.us-central1-c.c.bright-lattice-371819.internal, 46003, None)
+25/08/11 21:06:45 INFO StandaloneAppClient$ClientEndpoint: Executor updated: app-20250811210645-0001/0 is now RUNNING
+25/08/11 21:06:45 INFO StandaloneSchedulerBackend: SchedulerBackend is ready for scheduling beginning after reached minRegisteredResourcesRatio: 0.0
+25/08/11 21:06:47 INFO SparkContext: Starting job: reduce at SparkPi.scala:38
+25/08/11 21:06:47 INFO DAGScheduler: Got job 0 (reduce at SparkPi.scala:38) with 10 output partitions
+25/08/11 21:06:47 INFO DAGScheduler: Final stage: ResultStage 0 (reduce at SparkPi.scala:38)
+25/08/11 21:06:47 INFO DAGScheduler: Parents of final stage: List()
+25/08/11 21:06:47 INFO DAGScheduler: Missing parents: List()
+25/08/11 21:06:47 INFO DAGScheduler: Submitting ResultStage 0 (MapPartitionsRDD[1] at map at SparkPi.scala:34), which has no missing parents
+25/08/11 21:06:48 INFO MemoryStore: MemoryStore started with capacity 434.4 MiB
+25/08/11 21:06:48 INFO MemoryStore: Block broadcast_0 stored as values in memory (estimated size 4.0 KiB, free 434.4 MiB)
+25/08/11 21:06:48 INFO MemoryStore: Block broadcast_0_piece0 stored as bytes in memory (estimated size 2.2 KiB, free 434.4 MiB)
+25/08/11 21:06:48 INFO SparkContext: Created broadcast 0 from broadcast at DAGScheduler.scala:1676
+25/08/11 21:06:48 INFO DAGScheduler: Submitting 10 missing tasks from ResultStage 0 (MapPartitionsRDD[1] at map at SparkPi.scala:34) (first 15 tasks are for partitions Vector(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+25/08/11 21:06:48 INFO TaskSchedulerImpl: Adding task set 0.0 with 10 tasks resource profile 0
+25/08/11 21:07:03 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+25/08/11 21:07:18 WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI to ensure that workers are registered and have sufficient resources
+25/08/11 21:07:27 INFO StandaloneSchedulerBackend$StandaloneDriverEndpoint: Registered executor NettyRpcEndpointRef(spark-client://Executor) (10.128.0.6:42894) with ID 0, ResourceProfileId 0
+25/08/11 21:07:29 INFO BlockManagerMasterEndpoint: Registering block manager 10.128.0.6:34261 with 434.4 MiB RAM, BlockManagerId(0, 10.128.0.6, 34261, None)
+25/08/11 21:07:31 INFO TaskSetManager: Starting task 0.0 in stage 0.0 (TID 0) (10.128.0.6,executor 0, partition 0, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:36 INFO TaskSetManager: Starting task 1.0 in stage 0.0 (TID 1) (10.128.0.6,executor 0, partition 1, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:36 INFO TaskSetManager: Finished task 0.0 in stage 0.0 (TID 0) in 5230 ms on 10.128.0.6 (executor 0) (1/10)
+25/08/11 21:07:36 INFO TaskSetManager: Starting task 2.0 in stage 0.0 (TID 2) (10.128.0.6,executor 0, partition 2, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:36 INFO TaskSetManager: Finished task 1.0 in stage 0.0 (TID 1) in 252 ms on 10.128.0.6 (executor 0) (2/10)
+25/08/11 21:07:36 INFO TaskSetManager: Starting task 3.0 in stage 0.0 (TID 3) (10.128.0.6,executor 0, partition 3, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:36 INFO TaskSetManager: Finished task 2.0 in stage 0.0 (TID 2) in 248 ms on 10.128.0.6 (executor 0) (3/10)
+25/08/11 21:07:36 INFO TaskSetManager: Starting task 4.0 in stage 0.0 (TID 4) (10.128.0.6,executor 0, partition 4, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:36 INFO TaskSetManager: Finished task 3.0 in stage 0.0 (TID 3) in 110 ms on 10.128.0.6 (executor 0) (4/10)
+25/08/11 21:07:37 INFO TaskSetManager: Starting task 5.0 in stage 0.0 (TID 5) (10.128.0.6,executor 0, partition 5, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 4.0 in stage 0.0 (TID 4) in 418 ms on 10.128.0.6 (executor 0) (5/10)
+25/08/11 21:07:37 INFO TaskSetManager: Starting task 6.0 in stage 0.0 (TID 6) (10.128.0.6,executor 0, partition 6, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 5.0 in stage 0.0 (TID 5) in 89 ms on 10.128.0.6 (executor 0) (6/10)
+25/08/11 21:07:37 INFO TaskSetManager: Starting task 7.0 in stage 0.0 (TID 7) (10.128.0.6,executor 0, partition 7, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 6.0 in stage 0.0 (TID 6) in 173 ms on 10.128.0.6 (executor 0) (7/10)
+25/08/11 21:07:37 INFO TaskSetManager: Starting task 8.0 in stage 0.0 (TID 8) (10.128.0.6,executor 0, partition 8, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 7.0 in stage 0.0 (TID 7) in 73 ms on 10.128.0.6 (executor 0) (8/10)
+25/08/11 21:07:37 INFO TaskSetManager: Starting task 9.0 in stage 0.0 (TID 9) (10.128.0.6,executor 0, partition 9, PROCESS_LOCAL, 10005 bytes) 
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 8.0 in stage 0.0 (TID 8) in 177 ms on 10.128.0.6 (executor 0) (9/10)
+25/08/11 21:07:37 INFO TaskSetManager: Finished task 9.0 in stage 0.0 (TID 9) in 55 ms on 10.128.0.6 (executor 0) (10/10)
+25/08/11 21:07:37 INFO TaskSchedulerImpl: Removed TaskSet 0.0 whose tasks have all completed, from pool 
+25/08/11 21:07:37 INFO DAGScheduler: ResultStage 0 (reduce at SparkPi.scala:38) finished in 49919 ms
+25/08/11 21:07:37 INFO DAGScheduler: Job 0 is finished. Cancelling potential speculative or zombie tasks for this job
+25/08/11 21:07:37 INFO TaskSchedulerImpl: Canceling stage 0
+25/08/11 21:07:37 INFO TaskSchedulerImpl: Killing all running tasks in stage 0: Stage finished
+25/08/11 21:07:37 INFO DAGScheduler: Job 0 finished: reduce at SparkPi.scala:38, took 50054.45159 ms
+Pi is roughly 3.1425791425791427
+25/08/11 21:07:37 INFO SparkContext: SparkContext is stopping with exitCode 0 from stop at SparkPi.scala:40.
+25/08/11 21:07:37 INFO SparkUI: Stopped Spark web UI at http://spark-master.us-central1-c.c.bright-lattice-371819.internal:4040
+25/08/11 21:07:37 INFO StandaloneSchedulerBackend: Shutting down all executors
+25/08/11 21:07:37 INFO StandaloneSchedulerBackend$StandaloneDriverEndpoint: Asking each executor to shut down
+25/08/11 21:07:38 INFO MapOutputTrackerMasterEndpoint: MapOutputTrackerMasterEndpoint stopped!
+25/08/11 21:07:38 INFO MemoryStore: MemoryStore cleared
+25/08/11 21:07:38 INFO BlockManager: BlockManager stopped
+25/08/11 21:07:38 INFO BlockManagerMaster: BlockManagerMaster stopped
+25/08/11 21:07:38 INFO OutputCommitCoordinator$OutputCommitCoordinatorEndpoint: OutputCommitCoordinator stopped!
+25/08/11 21:07:38 INFO SparkContext: Successfully stopped SparkContext
+25/08/11 21:07:38 INFO ShutdownHookManager: Shutdown hook called
+25/08/11 21:07:38 INFO ShutdownHookManager: Deleting directory /tmp/spark-378d7de2-e933-487f-9cf9-f3a439a24c9c
+25/08/11 21:07:38 INFO ShutdownHookManager: Deleting directory /tmp/spark-48d76905-c2e3-4e2e-8cef-0794f544419e
+
+
+
+
+1) Driver ayağa kalkar (SparkContext & UI)
+Running Spark version 4.0.0 → driver JVM başlıyor, SparkContext oluşturuluyor.
+Submitted application: Spark Pi → uygulama adı.
+ResourceProfile ... executor resources ... task resources → varsayılan kaynak profili: her executor için ~1 GiB bellek, her task 1 CPU.
+Successfully started service 'sparkDriver' on port ... → driver’ın RPC servisi.
+Start Jetty ... for SparkUI ve SparkUI on port 4040 → web UI açıldı.
+Added JAR ... spark-examples_2.13-4.0.0.jar → örnek JAR driver’dan cluster’a dağıtıldı.
+Bu bölümde akılda tut: Driver orkestratördür; UI 4040’tadır.
+2) Master’a bağlan ve executor iste
+Connecting to master spark://spark-master:7077 → Standalone master ile bağlantı.
+Connected to Spark cluster ... app ID ... → uygulama, cluster’da kimlik aldı.
+Executor added ... with 1 core(s) ve Granted executor ID ... 1 core(s), 1024.0 MiB RAM
+→ worker 10.128.0.6 üzerinde 1 core + ~1 GiB’lik executor 0 tahsis edildi.
+Mimari eşleşme: Master kaynak atar, executor’lar işi yapar.
+3) Depolama & veri bloğu altyapısı hazır
+NettyBlockTransferService / BlockManager ... Registered
+→ BlockManager (bellek/disk cache, shuffle blokları) ve blok transfer servisi açıldı.
+Bu katman, RDD cache/shuffle verilerinin düğümler arasında taşınmasından sorumlu.
+4) İş (Action) tetikler: DAG oluşur → Stage → Tasks
+Starting job: reduce at SparkPi.scala:38 → action (reduce) çağrıldı, Job 0 doğdu.
+Final stage: ResultStage 0 → bağımlılık zinciri tek stage’e indirgenmiş.
+10 output partitions → slice=10 → 10 partition → 10 task üretilecek.
+broadcast_0 ... → küçük yardımcı veri broadcast edildi (tüm executorlara kopya).
+DAGScheduler işi stage’lere, stage’leri task’lara böler. Burada tek stage, 10 task var.
+5) Kaynak gelene kadar bekleme uyarısı (normal)
+Initial job has not accepted any resources ... (birkaç kez)
+→ Executor tam “RUNNING” hale gelip BlockManager’ını kaydedene kadar TaskScheduler bekler.
+Biraz sonra:
+Registered executor ... with ID 0 ve Registering block manager 10.128.0.6:...
+→ Executor hazır.
+Eğitim notu: Bu uyarı hata değildir; “task atayacak hazır çekirdek yok” demektir. Executor gelince biter.
+6) Task’lar sırayla koşturulur (TaskSetManager)
+Submitting 10 missing tasks ...
+Adding task set 0.0 with 10 tasks
+Ardından 0’dan 9’a kadar satırlar:
+Starting task 0.0 ... (10.128.0.6, executor 0, partition 0, PROCESS_LOCAL, 10005 bytes)
+Finished task 0.0 ... in 5230 ms ... (1/10)
+...
+Finished task 9.0 ... in 55 ms ... (10/10)
+Açılım:
+task 0.0 → task id 0, attempt 0 (ilk deneme).
+(10.128.0.6, executor 0, partition X) → hangi partition’ı, hangi executor’da.
+PROCESS_LOCAL → veri yerelliği en iyi seviyede (veri executor’ın sürecinde).
+... in N ms → görev süresi.
+(k/10) → ilerleme; 10 görevden kaçı bitti.
+Senin cluster’ında 1 executor / 1 core olduğu için görevler seri çalışıyor. Birden fazla core/executor olsaydı bu satırlar eşzamanlı task’lar gösterirdi.
+7) Stage ve Job biter → sonuç yazılır
+ResultStage 0 ... finished in 49919 ms ve Job 0 finished ... took 50054 ms
+→ Stage ve Job tamamlandı (yaklaşık 50 sn).
+Pi is roughly 3.1425... → Uygulama çıktısı (Monte Carlo Pi tahmini).
+SparkPi’nin mantığı: her partition belli sayıda rastgele nokta üretip map tarafında isabet sayısını toplar; reduce ile hepsini birleştirir.
+8) Temizlik (graceful shutdown)
+SparkContext is stopping ... exitCode 0 → başarılı çıkış.
+Shutting down all executors → executor kapatıldı.
+Stopped Spark web UI → 4040 kapandı.
+Deleting directory /tmp/spark-... → geçici klasörler temizlendi.
