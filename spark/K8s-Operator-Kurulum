@@ -1,0 +1,199 @@
+1. Adım Operator Kurulumu
+
+[veritabaniegitimleri@spark-master spark]$ helm repo add --force-update spark-operator https://kubeflow.github.io/spark-operator
+
+"spark-operator" has been added to your repositories
+
+[veritabaniegitimleri@spark-master spark]$ helm repo update
+
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "spark-operator" chart repository
+...Successfully got an update from the "bitnami" chart repository
+Update Complete. ⎈Happy Helming!⎈
+
+
+[veritabaniegitimleri@spark-master spark]$ helm upgrade --install spark-operator spark-operator/spark-operator \
+>   -n spark-operator --create-namespace --wait \
+>   --set "spark.jobNamespaces={spark-jobs}"
+
+Release "spark-operator" does not exist. Installing it now.
+NAME: spark-operator
+LAST DEPLOYED: Mon Aug 11 12:51:48 2025
+NAMESPACE: spark-operator
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+
+******************Açıklama
+helm upgrade --install spark-operator spark-operator/spark-operator
+upgrade --install: idempotent kurulum (mevcutsa günceller, yoksa kurar).
+spark-operator: Helm release adı.
+spark-operator/spark-operator: repo/chart ismi (öncesinde helm repo add spark-operator https://kubeflow.github.io/spark-operator ve helm repo update yaptığını varsayar).
+-n spark-operator --create-namespace
+Chart’ı spark-operator adlı namespace’e kurar.
+Namespace yoksa oluşturur.
+--wait
+Kurulumdan sonra Deployment/Pod/Webhook gibi kaynaklar ready olana kadar bekler.
+Bu sayede “kuruldu ama hazır değil” durumlarına takılmazsın.
+--set "spark.jobNamespaces={spark-jobs}"
+Operatörün izleyeceği / job koşturacağı namespace’leri kısıtlar (security ve izolasyon için iyi uygulama).
+Bu örnekte sadece spark-jobs içinde tanımlanan SparkApplication / ScheduledSparkApplication nesnelerini işler.
+Chart, bu namespace için gerekli RBAC (Role/RoleBinding) ayarlarını da otomatik oluşturur.
+Birden fazla namespace istersen: --set "spark.jobNamespaces={ns1,ns2}"
+*****************Kontrol
+[veritabaniegitimleri@spark-master spark]$ kubectl get deploy,pods -n spark-operator
+
+NAME                                        READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/spark-operator-controller   1/1     1            1           2m44s
+deployment.apps/spark-operator-webhook      1/1     1            1           2m44s
+
+NAME                                             READY   STATUS    RESTARTS   AGE
+pod/spark-operator-controller-7bf5b5cf8c-qtxbq   1/1     Running   0          2m44s
+pod/spark-operator-webhook-5dfbc585ff-zvbqr      1/1     Running   0          2m44s
+
+[veritabaniegitimleri@spark-master spark]$ kubectl get crd | egrep 'sparkapplications|scheduledsparkapplications'
+
+scheduledsparkapplications.sparkoperator.k8s.io   2025-08-11T12:51:44Z
+sparkapplications.sparkoperator.k8s.io            2025-08-11T12:51:45Z
+
+2.Adım
+
+spark-jobs namespace + RBAC (driver/executor için SA) : Spark jobların çalışacağı namespace ve sevice account tanımları yapılır.
+
+[veritabaniegitimleri@spark-master spark]$ kubectl create namespace spark-jobs 2>/dev/null || true
+
+cat <<'YAML' > spark-rbac.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark
+  namespace: spark-jobs
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-role
+  namespace: spark-jobs
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - configmaps
+      - persistentvolumeclaims
+      - events
+    verbs: ["get","list","watch","create","patch","update","delete","deletecollection"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-rolebinding
+  namespace: spark-jobs
+subjects:
+  - kind: ServiceAccount
+    name: spark
+    namespace: spark-jobs
+roleRef:
+  kind: Role
+  name: spark-role
+  apiGroup: rbac.authorization.k8s.io
+YAML
+
+[veritabaniegitimleri@spark-master spark]$ kubectl apply -f spark-rbac.yaml
+serviceaccount/spark created
+role.rbac.authorization.k8s.io/spark-role created
+rolebinding.rbac.authorization.k8s.io/spark-rolebinding created
+
+Service account'un erişimleri kontrol edilir.
+
+[veritabaniegitimleri@spark-master spark]$ kubectl auth can-i list persistentvolumeclaims --as=system:serviceaccount:spark-jobs:spark -n spark-jobs
+yes
+[veritabaniegitimleri@spark-master spark]$ kubectl auth can-i deletecollection pods       --as=system:serviceaccount:spark-jobs:spark -n spark-jobs
+yes
+[veritabaniegitimleri@spark-master spark]$ 
+
+3. Adım
+
+[veritabaniegitimleri@spark-master spark]$ cat <<'YAML' > spark-pi.yaml
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: spark-pi
+  namespace: spark-jobs
+spec:
+  type: Scala
+  mode: cluster
+  image: apache/spark:3.5.6
+  imagePullPolicy: IfNotPresent
+  sparkVersion: "3.5.6"
+  mainClass: org.apache.spark.examples.SparkPi
+  mainApplicationFile: "local:///opt/spark/examples/jars/spark-examples_2.12-3.5.6.jar"
+  restartPolicy:
+    type: Never
+
+  driver:
+    serviceAccount: spark
+    cores: 1
+    coreRequest: "200m"
+    memory: "512m"
+    memoryOverhead: "256m"
+    # control-plane taint toleration (lab için)
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+
+  executor:
+    serviceAccount: spark
+    instances: 1
+    cores: 1
+    coreRequest: "200m"
+    memory: "512m"
+    memoryOverhead: "256m"
+    # executors sadece worker label'lı node'a yerleşsin
+    nodeSelector:
+      node-role: "worker"
+    # (gerekirse control-plane toleration da ekli, ama nodeSelector worker'a yönlendirdiği için genelde gerekmez)
+    tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+YAML
+
+
+
+yaml oluşturulduktan sonra, job çalıştırmak için kubectl apply komutu kullanılır.
+[veritabaniegitimleri@spark-master spark]$  kubectl apply -f spark-pi.yaml
+[veritabaniegitimleri@spark-master spark]$  kubectl get pods -n spark-jobs -w
+[veritabaniegitimleri@spark-master spark]$  kubectl logs -f $(kubectl get pods -n spark-jobs -o name | grep driver) -n spark-jobs
+
+
+loglarda Pi is roughly 3.135515677578388 ifadesini görmemiz gerekir.
+
+25/08/11 13:04:39 INFO DAGScheduler: ResultStage 0 (reduce at SparkPi.scala:38) finished in 1.603 s
+25/08/11 13:04:39 INFO DAGScheduler: Job 0 is finished. Cancelling potential speculative or zombie tasks for this job
+25/08/11 13:04:39 INFO TaskSchedulerImpl: Killing all running tasks in stage 0: Stage finished
+25/08/11 13:04:39 INFO DAGScheduler: Job 0 finished: reduce at SparkPi.scala:38, took 1.734243 s
+Pi is roughly 3.135515677578388
+25/08/11 13:04:39 INFO SparkContext: SparkContext is stopping with exitCode 0.
+
+
+
+Temizlik
+
+kubectl delete sparkapplication spark-pi -n spark-jobs --ignore-not-found
+
+helm uninstall spark-operator -n spark-operator
+kubectl delete ns spark-operator
+kubectl delete ns spark-jobs
+kubectl delete crd sparkapplications.sparkoperator.k8s.io scheduledsparkapplications.sparkoperator.k8s.io
+
+
+
