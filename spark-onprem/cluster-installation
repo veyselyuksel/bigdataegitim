@@ -146,3 +146,37 @@ SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file:/var/spark-events \
  -Dspark.history.ui.port=18080" \
 $SPARK_HOME/sbin/start-history-server.sh
 Erişim: http://spark-master:18080 (Spark 4 docs genel görünüm/izleme bölümleri) 
+
+
+
+
+*****Örnek uygulama açıklama
+Consola basılanlar, Spark scheduler logları. Özellikle TaskSetManager’ın her görevi (task) başlatıp bitirdiğini rapor ettiği satırlar. SparkPi’yi büyük bir “slice” sayısıyla (örn. 20000) çalıştırdığın için 20.000 task üretiliyor ve her biri için böyle bir satır görüyorsun.
+Satırları parça parça okuyalım:
+
+25/08/11 21:01:51 INFO TaskSetManager: → zaman damgası, log seviyesi, bileşen (TaskSetManager).
+Starting task 3304.0 in stage 0.0 (TID 3304) → stage 0’da task 3304 başlatılıyor. .0 sonundaki attempt numarası (0 = ilk deneme). TID Spark’ın iç task kimliği.
+(10.128.0.6, executor 0, partition 3304, PROCESS_LOCAL, 10005 bytes) →
+10.128.0.6 / executor 0: Hangi executorda/hangi nodda koşuyor.
+partition 3304: Bu görevin işlediği RDD partition’ı.
+PROCESS_LOCAL: yerellik (data locality) seviyesi; veri tam o executorda. (Diğerleri: NODE_LOCAL, ANY, vb.)
+10005 bytes: Bu görevin gönderilen seri hale getirilmiş görev boyutu.
+Finished task 3304.0 ... in 13 ms ... (3305/20000) → Görev 13 ms’te bitti; ilerleme: 20.000 görevden 3.305’i tamamlandı.
+Neden bu kadar çok satır?
+SparkPi’de komuttaki son sayı slice sayısıdır; bu da tipik olarak task sayısı olur. 20000 verdiğin için 20 bin görev sırayla çalışıyor.
+Log seviyen INFO olduğu için her görevi yazıyor.
+Tek executor ve 1 core kullandığın için görevler seri ilerliyor; o yüzden art arda “Starting/Finished” görüyorsun.
+İşine yarayacak ipuçları:
+“Gürültüyü” azalt: log seviyesini WARN’a çek.
+cp $SPARK_HOME/conf/log4j2.properties.template $SPARK_HOME/conf/log4j2.properties
+sed -i 's/^rootLogger\.level.*/rootLogger.level = WARN/' $SPARK_HOME/conf/log4j2.properties
+# TaskSetManager’ı tamamen kısmak istersen:
+printf '\nlogger.taskset.name = org.apache.spark.scheduler.TaskSetManager\nlogger.taskset.level = ERROR\n' \
+  | tee -a $SPARK_HOME/conf/log4j2.properties
+Konsol ilerleme çubuğunu kapat (farklı ama faydalı):
+--conf spark.ui.showConsoleProgress=false
+Daha az görev üret: SparkPi’yi daha küçük slice ile çalıştır:
+... SparkPi <slice> → örn. 200 yerine 20000.
+Paralellik artır: daha fazla executor/core ver; o zaman birden fazla görev aynı anda tamamlandığı için log akışı farklı görünür.
+
+
