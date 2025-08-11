@@ -1,0 +1,103 @@
+1- Worker sayısını değiştirme
+[veritabaniegitimleri@spark-master spark]$ kubectl scale deployment spark-worker -n spark --replicas=4
+deployment.apps/spark-worker scaled
+[veritabaniegitimleri@spark-master spark]$ kubectl get all -n spark
+NAME                               READY   STATUS    RESTARTS      AGE
+pod/spark-master-0                 1/1     Running   1 (50m ago)   43h
+pod/spark-worker-fc79d4487-9fw2m   1/1     Running   1 (50m ago)   43h
+pod/spark-worker-fc79d4487-h449r   1/1     Running   1 (50m ago)   43h
+pod/spark-worker-fc79d4487-jr25h   1/1     Running   0             4s
+pod/spark-worker-fc79d4487-l4t59   1/1     Running   0             4s
+
+NAME                       TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)                         AGE
+service/spark-master-svc   NodePort   10.98.38.82   <none>        8080:30750/TCP,7077:31135/TCP   43h
+
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/spark-worker   4/4     4            4           43h
+
+NAME                                     DESIRED   CURRENT   READY   AGE
+replicaset.apps/spark-worker-fc79d4487   4         4         4       43h
+
+Spark web UI'dan workers sayısının değiştiği görüntülenebilir.
+
+2- Kubernetes limit/request vererek worker konteynerine tavan/taban belirleme : 
+
+[veritabaniegitimleri@spark-master spark]$ kubectl set resources deployment spark-worker -n spark \
+  --limits=cpu=2,memory=3Gi \
+  --requests=cpu=1,memory=2Gi
+
+
+[veritabaniegitimleri@spark-master spark]$ kubectl get pod spark-master-0 -n spark -o yaml | grep -A5 "resources:"
+
+# rollout’u izle
+[veritabaniegitimleri@spark-master spark]$ kubectl rollout status deployment/spark-worker -n spark
+
+
+3- Worker’ların Spark’a bildirilen CORE/MEM ayarı (Spark seviyesi)
+Bitnami imajı, worker JVM’ini şu env’lerle başlatır:
+SPARK_WORKER_CORES (int)
+SPARK_WORKER_MEMORY (örn. 2g, 2048m)
+SPARK_MASTER_URL (örn. spark://spark-master-svc:7077)
+Bunları deployment üzerinde güncelle:
+# örnek: 2 core, 2g bellek
+[veritabaniegitimleri@spark-master spark]$ kubectl set env deployment/spark-worker -n spark \
+  SPARK_WORKER_CORES=2 SPARK_WORKER_MEMORY=2g
+
+# rolling restart
+[veritabaniegitimleri@spark-master spark]$ kubectl rollout restart deployment/spark-worker -n spark
+Kural: SPARK_WORKER_MEMORY ≤ (container memory limit – ~300–500Mi JVM/OS payı). Aksi halde worker başlar ama executor’lar “out of memory” veya “cannot reserve” hatası verebilir.
+
+4- Master’ın bellek/ayarlarını güncelleme
+Master bir StatefulSet. JVM heap gibi ayarlar için Bitnami’de çoğunlukla SPARK_DAEMON_MEMORY çalışır (örn. 1g):
+[veritabaniegitimleri@spark-master spark]$ kubectl set env statefulset/spark-master -n spark SPARK_DAEMON_MEMORY=1g
+[veritabaniegitimleri@spark-master spark]$ kubectl rollout restart statefulset/spark-master -n spark
+
+5-  spark-submit ile “işe özel” kaynak vermek
+Her job, kendi executor kaynaklarını bağımsız ayarlayabilir:
+[veritabaniegitimleri@spark-master spark]$ spark-submit \
+  --master spark://<NODE_IP>:31135 \
+  --class org.apache.spark.examples.SparkPi \
+  --conf spark.executor.instances=2 \
+  --conf spark.executor.cores=1 \
+  --conf spark.executor.memory=1g \
+  $SPARK_HOME/examples/jars/spark-examples_2.13-*.jar 10
+
+6- Versiyon yükseltme / imaj güncelleme
+Rolling upgrade:
+# worker
+[veritabaniegitimleri@spark-master spark]$ kubectl set image deployment/spark-worker -n spark spark=bitnami/spark:4.0.1
+[veritabaniegitimleri@spark-master spark]$ kubectl rollout status deployment/spark-worker -n spark
+
+# master
+[veritabaniegitimleri@spark-master spark]$ kubectl set image statefulset/spark-master -n spark spark=bitnami/spark:4.0.1
+[veritabaniegitimleri@spark-master spark]$ kubectl rollout status statefulset/spark-master -n spark
+
+7- Spark History Server (job geçmişi)
+
+Event log’u aç:
+Job gönderirken: --conf spark.eventLog.enabled=true
+--conf spark.eventLog.dir=s3a://... ya da PVC’ye mount edilmiş bir klasör.
+History Server deployment (PVC ile) yap.
+UI’den geçmiş işler, stage’ler, DAG’lar göster.
+
+8- NodePort’u değiştirme/inceleme:
+[veritabaniegitimleri@spark-master spark]$ kubectl get svc spark-master-svc -n spark -o wide
+
+# Patch ile NodePort sabitleme
+[veritabaniegitimleri@spark-master spark]$ kubectl patch svc spark-master-svc -n spark \
+  -p '{"spec":{"type":"NodePort","ports":[{"name":"webui","port":8080,"targetPort":8080,"nodePort":30750},{"name":"spark","port":7077,"targetPort":7077,"nodePort":31135}]}}'
+
+
+9- Kaynakları temizlemek (lab sıfırlama):
+[veritabaniegitimleri@spark-master spark]$ kubectl delete -n spark svc spark-master-svc
+[veritabaniegitimleri@spark-master spark]$ kubectl delete -n spark deployment spark-worker
+[veritabaniegitimleri@spark-master spark]$ kubectl delete -n spark statefulset spark-master
+
+10- Pendingte kalan podları silmek icin
+[veritabaniegitimleri@spark-master spark]$ kubectl delete pod spark-master-0 -n spark --grace-period=0 --force
+[veritabaniegitimleri@spark-master spark]$ kubectl delete pod spark-worker-75889d577-xjtjs -n spark --grace-period=0 --force
+
+--grace-period=0 → bekleme süresini 0’a çeker
+--force → API server’dan doğrudan etcd kaydını siler (node ile iletişim zorunlu değil)
+
+
