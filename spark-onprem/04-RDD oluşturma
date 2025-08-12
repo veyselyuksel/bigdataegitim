@@ -1,20 +1,23 @@
-[veritabaniegitimleri@spark-master py312]$ cd bin/
-[veritabaniegitimleri@spark-master bin]$ ls
-Activate.ps1   beeline.cmd           load-spark-env.sh  pyspark2.cmd     spark-class          spark-shell2.cmd  spark-submit2.cmd
-__pycache__    docker-image-tool.sh  pip                python           spark-class.cmd      spark-sql         sparkR
-activate       find-spark-home       pip3               python3          spark-class2.cmd     spark-sql.cmd     sparkR.cmd
-activate.csh   find-spark-home.cmd   pip3.12            python3.12       spark-connect-shell  spark-sql2.cmd    sparkR2.cmd
-activate.fish  find_spark_home.py    pyspark            run-example      spark-shell          spark-submit
-beeline        load-spark-env.cmd    pyspark.cmd        run-example.cmd  spark-shell.cmd      spark-submit.cmd
-[veritabaniegitimleri@spark-master bin]$ source activate
-((py312) ) [veritabaniegitimleri@spark-master bin]$ pyspark --master spark://spark-master:7077
+Master ve worker sunucularda spark-env.sh dosyasının içine aşağıdaki satırlar eklenir.
+export PYSPARK_PYTHON=/usr/bin/python3.12
+export PYSPARK_DRIVER_PYTHON=/usr/bin/python3.12
+
+Örnek uygulama
+
+data = [("maths", 52), ("english", 75), ("science", 82), ("computer", 65), ("maths", 85)]
+rdd = sc.parallelize(data, numSlices=2)
+sorted_rdd = rdd.sortByKey(ascending=True)
+for item in sorted_rdd.collect():
+    print(item)
+
+[spark@spark-master ~]$ pyspark --master spark://spark-master:7077
 Python 3.12.11 (main, Jun 19 2025, 11:41:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-27)] on linux
 Type "help", "copyright", "credits" or "license" for more information.
 WARNING: Using incubator modules: jdk.incubator.vector
 Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
 Setting default log level to "WARN".
 To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
-25/08/12 13:07:42 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+25/08/12 16:47:40 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
 Welcome to
       ____              __
      / __/__  ___ _____/ /__
@@ -24,8 +27,80 @@ Welcome to
 
 Using Python version 3.12.11 (main, Jun 19 2025 11:41:33)
 Spark context Web UI available at http://spark-master.us-central1-c.c.bright-lattice-371819.internal:4040
-Spark context available as 'sc' (master = spark://spark-master:7077, app id = app-20250812130744-0000).
+Spark context available as 'sc' (master = spark://spark-master:7077, app id = app-20250812164743-0000).
 SparkSession available as 'spark'.
+>>> spark = spark
+>>> sc = spark.sparkContext
+>>> data = list(range(1, 11))
+>>> rdd = sc.parallelize(data, numSlices=2)
+>>> print("Partition sayısı:", rdd.getNumPartitions())
+Partition sayısı: 2
+>>> print("RDD içeriği:", rdd.collect())
+RDD içeriği: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]                                    
+>>> data = [("maths", 52), ("english", 75), ("science", 82), ("computer", 65), ("maths", 85)]
+>>> rdd = sc.parallelize(data, numSlices=2)
+>>> sorted_rdd = rdd.sortByKey(ascending=True)
+>>> for item in sorted_rdd.collect():                                           
+...     print(item)
+... 
+('computer', 65)                                                                
+('english', 75)
+('maths', 52)
+('maths', 85)
+('science', 82)
 >>> 
 
 
+1) Driver’daki lokal koleksiyon
+data = [...] satırı driver belleğinde duran sıradan bir Python listesi (lokal koleksiyon).
+Henüz dağıtık değil; executorlarda hiçbir şey yok.
+2) parallelize ile RDD yaratma
+rdd = sc.parallelize(data, numSlices=2) lokal listeyi RDD’ye çevirir.
+Ortaya çıkan şey bir Pair RDD’dir (anahtar-değer: (str, int)).
+numSlices=2 diyerek RDD’yi 2 partition’a böldük. Bu:
+DAG’de ParallelCollectionRDD oluşturur.
+Spark her partition için bir task çalıştırır; yani en az 2 task bekleriz.
+Veri yaklaşık eşit parçalar halinde partition’lara dağıtılır (küçük demoda “ilk yarı – ikinci yarı” gibi düşünebilirsiniz).
+Neden önemli? Partition sayısı paralellik ve iş planlama maliyeti arasında denge kurar. Kural olarak CPU başına 2–4 partition işe yarar; küçük demolar için 2 yeterlidir.
+3) sortByKey — geniş (wide) dönüşüm ve shuffle
+sorted_rdd = rdd.sortByKey(ascending=True) bir transformation’dır; henüz çalıştırılmaz (lazy).
+sortByKey wide dönüşümdür: veriyi anahtara göre yeniden bölmek (shuffle) gerekir.
+Spark burada anahtarları sıralamak için bir partitioner (genellikle RangePartitioner) kullanır:
+Anahtar aralıklarını belirler (ör. computer < english < maths < science…).
+Kayıtlar bu aralıklara göre ilgili partition’a shuffle edilir.
+Her partition içinde de kayıtlar anahtara göre sıralanır.
+numPartitions belirtmediğimiz için Spark makul bir partition sayısı kullanır (genellikle girdi RDD’nin partition sayısı veya cluster’ın varsayılan paralellik değeri).
+4) collect — aksiyon ve DAG’in çalışması
+for item in sorted_rdd.collect(): ile bir action çağırdık.
+Bu çağrı, bekleyen dönüşümleri gerçekten çalıştırır:
+Stage 1: Kaynağın (ParallelCollectionRDD) okunması ve sıralama için hazırlık.
+Stage 2: Shuffle + partition içi sıralama.
+Her partition için birer task yürür; sonuçlar driver’a geri toplanır ve Python listesine döner.
+5) Çıktı (beklenen sıralama)
+Anahtarlara göre alfabetik artan sıralama:
+('computer', 65)
+('english', 75)
+('maths', 52)
+('maths', 85)
+('science', 82)
+Aynı anahtar (“maths”) birden çok kez gelebilir; sortByKey anahtara göre sıralar, aynı anahtar içindeki değerleri ayrıca sıralamaz.
+6) Eğitimde gösterebileceğiniz mini kontroller (opsiyonel)
+Partition sayısı:
+rdd.getNumPartitions()
+Partition dağılımı:
+rdd.glom().collect()
+sorted_rdd.glom().collect()   # shuffle sonrası yeni dağılım
+Daha fazla paralellik denemek:
+rdd2 = sc.parallelize(data, 4)
+sorted2 = rdd2.sortByKey()
+Özet:
+parallelize lokal koleksiyonu Partition’lara bölerek RDD oluşturur.
+sortByKey anahtara göre shuffle gerektiren bir wide transformation’dır.
+collect bir action olup gerçek yürütmeyi tetikler; sonuçlar driver’a döner.
+
+*****
+Partition sayısı:
+rdd.getNumPartitions()
+Partition dağılımı:
+rdd.glom().collect()
+sorted_rdd.glom().collect()   # shuffle sonrası yeni dağılım
