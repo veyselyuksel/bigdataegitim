@@ -134,18 +134,32 @@ Spark history server
 9) (Opsiyonel) Spark History Server (bitmiş işlerin UI’ı)
 Neden? Job bittikten sonra bile geçmişi görmek için.
 Event log klasörü:
-sudo mkdir -p /var/spark-events
-sudo chown -R $(whoami) /var/spark-events
-spark-defaults.conf:
-cat <<'EOF' > $SPARK_HOME/conf/spark-defaults.conf
-spark.eventLog.enabled true
-spark.eventLog.dir file:/var/spark-events
-EOF
-History Server’ı aç:
-SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file:/var/spark-events \
- -Dspark.history.ui.port=18080" \
-$SPARK_HOME/sbin/start-history-server.sh
-Erişim: http://spark-master:18080 (Spark 4 docs genel görünüm/izleme bölümleri) 
+[veritabaniegitimleri@spark-master ~]$ sudo mkdir -p /var/spark-events
+[veritabaniegitimleri@spark-master ~]$ sudo chown -R spark:spark /var/spark-events
+[veritabaniegitimleri@spark-master ~]$ sudo su - spark
+Last login: Tue Aug 12 09:41:39 UTC 2025 on pts/0
+
+
+spark-defaults.conf dosyasında gerekli değişiklikler yapılır
+
+[spark@spark-master ~]$ cat <<'EOF' > $SPARK_HOME/conf/spark-defaults.conf
+ spark.eventLog.enabled true
+ spark.eventLog.dir file:/var/spark-events
+ spark.eventLog.compress true
+ spark.history.fs.cleaner.enabled true
+ spark.history.fs.cleaner.interval 1d
+ spark.history.fs.cleaner.maxAge 7d
+ EOF
+
+History Server servisleri başlatılır
+[spark@spark-master ~]$ SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=file:/var/spark-events \
+  -Dspark.history.ui.port=18080 \
+  -Dspark.history.fs.update.interval=10s" \
+ $SPARK_HOME/sbin/start-history-server.sh
+starting org.apache.spark.deploy.history.HistoryServer, logging to /opt/spark/logs/spark-spark-org.apache.spark.deploy.history.HistoryServer-1-spark-master.out
+[spark@spark-master ~]$ 
+
+Erişim: http://spark-master:18080 
 
 
 
