@@ -1,1 +1,92 @@
+1 - Spark master ve workers servislerin başlatılması
+Sbin dizini altında cluster servislerinin yönetimi ile ilgili scriptler bulunur,
+bin dizini altında ise daha çok client uygulamalarına yönelik tool'lar bulunur.
 
+[spark@spark-master bin]$ pwd
+/opt/spark/bin
+[spark@spark-master bin]$ ls
+beeline               find-spark-home.cmd  pyspark2.cmd     spark-class          sparkR       spark-shell2.cmd  spark-sql.cmd
+beeline.cmd           load-spark-env.cmd   pyspark.cmd      spark-class2.cmd     sparkR2.cmd  spark-shell.cmd   spark-submit
+docker-image-tool.sh  load-spark-env.sh    run-example      spark-class.cmd      sparkR.cmd   spark-sql         spark-submit2.cmd
+find-spark-home       pyspark              run-example.cmd  spark-connect-shell  spark-shell  spark-sql2.cmd    spark-submit.cmd
+[spark@spark-master bin]$ cd ..
+[spark@spark-master spark]$ ls
+bin  conf  data  examples  hive-jackson  jars  kubernetes  LICENSE  licenses  logs  NOTICE  python  R  README.md  RELEASE  sbin  work  yarn
+[spark@spark-master spark]$ cd sbin/
+[spark@spark-master sbin]$ ls
+decommission-worker.sh  start-all.sh             start-thriftserver.sh  stop-connect-server.sh  stop-worker.sh
+spark-config.sh         start-connect-server.sh  start-worker.sh        stop-history-server.sh  stop-workers.sh
+spark-daemon.sh         start-history-server.sh  start-workers.sh       stop-master.sh          workers.sh
+spark-daemons.sh        start-master.sh          stop-all.sh            stop-thriftserver.sh
+
+Spark Master servisini başlatmak için master sunucuda start-master.sh scripti kullanılır.
+Workerları başlatmak için ise yine master sunucu üzerinde start-workers.sh scripti kullanılır.
+
+[spark@spark-master ~]$ start-master.sh
+[spark@spark-master ~]$ start-workers.sh
+
+Servisleri durdurmak için de yine master üzerinde stop-master.sh ve stop-workers.sh sciptleri bulunur.
+[spark@spark-master ~]$ stop-master.sh
+[spark@spark-master ~]$ stop-workers.sh
+
+jps komutu ile master ve worker sunucularda servis durumları kontrol edilebilir.
+
+2- Loglar /opt/spark/logs altında yer alır.
+[spark@spark-master ~]$ cd /opt/spark/logs/
+[spark@spark-master logs]$ ls
+spark-spark-org.apache.spark.deploy.history.HistoryServer-1-spark-master.out
+spark-spark-org.apache.spark.deploy.master.Master-1-spark-master.out
+spark-spark-org.apache.spark.deploy.master.Master-1-spark-master.out.1
+spark-spark-org.apache.spark.deploy.master.Master-1-spark-master.out.2
+spark-spark-org.apache.spark.deploy.worker.Worker-1-spark-master.out
+
+3- Worker kaynaklarını ayarlamak (CPU/RAM)
+Worker kaynaklarını yükseltmek, kümeye kabul edilebilecek toplam işi artırır. 
+Uygulamanın kullanacağı miktarı ayrıca job düzeyinde belirleyebilirsiniz (aşağıda).
+Worker, kendi spark-env.sh dosyasındaki ayarları okur:
+# worker üzerinde
+vi /opt/spark/conf/spark-env.sh
+export SPARK_WORKER_CORES=2      # CPU çekirdeği
+export SPARK_WORKER_MEMORY=2g    # Worker’in uygulamalara ayıracağı RAM
+export SPARK_WORKER_WEBUI_PORT=8081
+
+# değişiklik sonrası worker’ı yeniden başlat
+/opt/spark/sbin/stop-worker.sh || true
+/opt/spark/sbin/start-worker.sh spark://spark-master:7077
+
+4- Job düzeyi kaynaklar (executor/core/memory)
+Standalone’da her uygulama tipik olarak her worker’da 1 executor alır. Aşağıdakilerle sınırları/dağılımı kontrol edin:
+spark-submit \
+  --master spark://spark-master:7077 \
+  --class <MainClass> \
+  --total-executor-cores 2 \         # tüm executors toplam CPU
+  --executor-cores 1 \                # her executor'ın CPU'su
+  --executor-memory 1g \              # her executor'ın heap’i
+  --conf spark.executor.memoryOverhead=384 \
+  <jar> <args>
+
+Alternatif (eşdeğer conf):
+--conf spark.cores.max=2
+--conf spark.executor.cores=1
+--conf spark.executor.memory=1g
+
+5- Şu an kurduğumuz cluster  Standalone (Spark Master/Worker) çalışıyor; YARN kullanılmıyor.
+Bunu nereden anlıyoruz?
+İşler --master spark://spark-master:7077 ile gönderilir → bu Standalone URL’si.
+Loglarda StandaloneSchedulerBackend, Connecting to master spark://... satırları var → YARN olsaydı YarnClientSchedulerBackend ve --master yarn görürdün.
+
+Master UI’n da 8080’de (http://spark-master:8080) → bu da Standalone master’a ait.
+
+Peki YARN kullanmak istersem?
+Hadoop + YARN (ResourceManager + NodeManager) kurulu ve çalışır olmalı.
+Spark’a YARN konfiglerini göstermek gerekir:
+export HADOOP_CONF_DIR=/etc/hadoop/conf   # yarn-site.xml, core-site.xml vs. burada
+İşler YARN’a şu şekilde gönderilir:
+spark-submit \
+  --master yarn \
+  --deploy-mode client|cluster \
+  --executor-memory 2g \
+  --executor-cores 2 \
+  --num-executors 3 \
+  ...
+YARN UI: ResourceManager Web UI (genelde 8088).
