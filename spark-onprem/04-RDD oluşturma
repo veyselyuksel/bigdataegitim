@@ -104,3 +104,87 @@ rdd.getNumPartitions()
 Partition dağılımı:
 rdd.glom().collect()
 sorted_rdd.glom().collect()   # shuffle sonrası yeni dağılım
+
+
+
+
+*************File'dan okuyarak RDD oluşturma
+Master ve worker sunucuda aş. gibi bir file oluşturulur.
+[spark@spark-worker-0 conf]$ echo -e "spark is fast\npyspark reads files\nrdd from local file" > /tmp/lines.txt
+Örnek uygulama
+rdd = sc.textFile("file:///tmp/lines.txt")
+print("Satır sayısı:", rdd.count())                                                                
+print("İlk 3 satır:", rdd.take(3))
+wc = (rdd.flatMap(lambda l: l.split())
+         .map(lambda w: (w.lower(), 1))
+         .reduceByKey(lambda a,b: a+b))
+print("WordCount:", wc.collect())
+
+
+[spark@spark-master ~]$ pyspark --master spark://spark-master:7077
+Python 3.12.11 (main, Jun 19 2025, 11:41:33) [GCC 8.5.0 20210514 (Red Hat 8.5.0-27)] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+WARNING: Using incubator modules: jdk.incubator.vector
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+25/08/12 18:25:07 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 4.0.0
+      /_/
+
+Using Python version 3.12.11 (main, Jun 19 2025 11:41:33)
+Spark context Web UI available at http://spark-master.us-central1-c.c.bright-lattice-371819.internal:4040
+Spark context available as 'sc' (master = spark://spark-master:7077, app id = app-20250812182511-0001).
+SparkSession available as 'spark'.
+>>> rdd = sc.textFile("file:///tmp/lines.txt")
+>>> print("Satır sayısı:", rdd.count())
+Satır sayısı: 3                                                                 
+>>> print("İlk 3 satır:", rdd.take(3))
+İlk 3 satır: ['spark is fast', 'pyspark reads files', 'rdd from local file']    
+>>> wc = (rdd.flatMap(lambda l: l.split())
+...          .map(lambda w: (w.lower(), 1))
+...          .reduceByKey(lambda a,b: a+b))
+>>> print("WordCount:", wc.collect())
+WordCount: [('fast', 1), ('rdd', 1), ('from', 1), ('file', 1), ('spark', 1), ('is', 1), ('pyspark', 1), ('reads', 1), ('files', 1), ('local', 1)]
+
+
+Örnek Açıklama
+
+RDD’nin kaynağı (driver’daki dosya yolu)
+rdd = sc.textFile("file:///tmp/lines.txt")
+sc.textFile(...) lokal dosyayı satır satır okur ve RDD[str] üretir (her satır bir eleman).
+file:// şeması “local file system” demektir. (Cluster modunda kullanacaksan dosya tüm worker’larda aynı path’te olmalı; HDFS/S3 tercih edilir.)
+Lazy evaluation (tembel yürütme)
+textFile bir transformation değildir ama sonuçta bir RDD soyutlaması üretir; okuma hemen yapılmaz.
+Gerçek okuma, ilk action çağrıldığında başlar.
+İlk action – satır sayısı
+rdd.count()
+Bu bir action’dır ve işi tetikler.
+Spark, RDD’nin partition’ları üzerinde paralel küçük sayımlar yapar, sonra toplamı driver’da birleştirir.
+Sonuç: Satır sayısı: 3
+Örnek veri çekme (ikinci action)
+rdd.take(3)
+Yine bir action. İlk 3 elemanı (satırı) getirir; yeterli sayıya ulaşınca durur.
+Sonuç: ['spark is fast', 'pyspark reads files', 'rdd from local file']
+Kelimeye parçalama – flatMap
+rdd.flatMap(lambda l: l.split())
+Transformation: Her satırı split() ile kelimelere ayırır, sonra flatten eder.
+Tip dönüşümü: RDD[str] (satırlar) → RDD[str] (kelimeler).
+Pair RDD oluşturma – map
+.map(lambda w: (w.lower(), 1))
+Transformation: Her kelimeyi küçük harfe çevirip (kelime, 1) çiftine dönüştürür.
+Artık elimizde bir Pair RDD var: RDD[(str, int)].
+Anahtara göre toplama – reduceByKey
+.reduceByKey(lambda a, b: a + b)
+Wide transformation: Aynı anahtar (kelime) için değerleri toplar.
+Shuffle gerektirir; ayrıca map-side combine yapabildiği için verimlidir (genelde groupByKey’den daha iyi).
+Sonucu driver’a getir – collect
+wc.collect()
+Action: Tüm pipeline’ı çalıştırır (okuma → flatMap → map → reduceByKey).
+Sonuçlar driver’a döner. (Büyük veri için collect() risklidir; demoda sorun yok.)
+Neden sıralama yok?
+collect() dönüş sırası garantili değil; partition ve shuffle’a bağlıdır. (Eğitimde önemli bir nokta.)
