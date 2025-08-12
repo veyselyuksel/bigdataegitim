@@ -125,3 +125,14 @@ RDD → kelimelere bölünür
 Kelimeler → (kelime, 1) çiftleri
 reduceByKey ile sayılar toplanır
 collect ile driver’a getirilir ve yazdırılır
+
+pyspark ile standalone spark çalıştırırken master ve workerda aşağıdaki değişiklik spark-env.sh dosyalarında yapılmalıdır.
+[spark@spark-worker-0 conf]$ cat spark-env.sh
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export SPARK_WORKER_CORES=1
+export SPARK_WORKER_MEMORY=1g
+export SPARK_WORKER_WEBUI_PORT=8081
+export PYSPARK_PYTHON=/usr/bin/python3.12
+export PYSPARK_DRIVER_PYTHON=/usr/bin/python3.12
+
+
