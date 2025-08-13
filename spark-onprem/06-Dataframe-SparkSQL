@@ -158,3 +158,122 @@ joined_dfapi = (
 
 # DataFrame API ile yapılan join'in sonucunu gösteriyoruz
 joined_dfapi.show()
+
+
+Sorular
+
+scores üzerinde en yüksek skorlu 3 kişiyi SQL ile getir.
+DataFrame API ile class bazında rank kolonu ekle (Window + rank()).
+score >= 80 olanların oranını (count_if veya avg((score>=80).cast("int"))) sınıf bazında hesapla.
+
+
+
+
+Çözümler
+
+1) scores üzerinde en yüksek skorlu 3 kişiyi SQL ile getir
+SQL çözümü
+top3_sql = spark.sql("""
+  SELECT name, class, score
+  FROM scores
+  ORDER BY score DESC
+  LIMIT 3
+""")
+top3_sql.show()
+Açıklama
+ORDER BY score DESC ile büyükten küçüğe sıralıyoruz.
+LIMIT 3 en üst 3 kaydı alır.
+(Bizim örnek veride beklenen: dina (92), bob (90), alice (85).)
+DataFrame API (alternatif)
+from pyspark.sql import functions as F
+
+top3_df = (df
+  .orderBy(F.col("score").desc())
+  .limit(3))
+top3_df.show()
+Aynı mantığın DF API karşılığıdır.
+
+
+
+
+
+2) DataFrame API ile class bazında rank kolonu ekle (Window + rank())
+
+DF API çözümü
+
+from pyspark.sql import functions as F
+from pyspark.sql import Window
+w = Window.partitionBy("class").orderBy(F.col("score").desc())
+df_ranked = df.withColumn("rank_in_class", F.rank().over(w))
+df_ranked.orderBy("class", "rank_in_class").show()
+
+Açıklama
+Window.partitionBy("class") → her sınıf kendi içinde değerlendirilir.
+orderBy(score DESC) → en yüksek puan 1. sırada olacak şekilde.
+rank() aynı skora sahip birden fazla kişi varsa bağıl sıralama yapar (ör. 1,1,3).
+Eşit skorlarda ardışık sıralama istersen dense_rank() kullan:
+df_dense = df.withColumn("dense_rank_in_class", F.dense_rank().over(w))
+
+
+SQL (alternatif)
+rank_sql = spark.sql("""
+  SELECT
+    name, class, score,
+    RANK()       OVER (PARTITION BY class ORDER BY score DESC)  AS rank_in_class,
+    DENSE_RANK() OVER (PARTITION BY class ORDER BY score DESC)  AS dense_rank_in_class
+  FROM scores
+  ORDER BY class, rank_in_class
+""")
+rank_sql.show()
+
+
+
+
+
+
+3) score >= 80 olanların oranını sınıf bazında hesapla
+DF API — avg((cond).cast("int")) yöntemi
+
+ratio_df = (df
+  .groupBy("class")
+  .agg(F.avg((F.col("score") >= 80).cast("int")).alias("ratio_ge_80")))
+ratio_df.show()
+
+
+Açıklama
+(score >= 80) boolean döner.
+cast("int") ile True→1, False→0 olur.
+avg(...) → sınıf içindeki 1’lerin oranını verir.
+(Örneğimizde beklenen: A → 1/3 ≈ 0.3333, B → 2/2 = 1.0.)
+
+DF API — count_if (Spark 3.2+) yöntemi
+
+ratio_df2 = (df
+  .groupBy("class")
+  .agg(
+      F.count_if(F.col("score") >= 80).alias("ge80"),
+      F.count("*").alias("cnt")
+  )
+  .withColumn("ratio_ge_80", F.col("ge80") / F.col("cnt")))
+ratio_df2.show()
+
+
+Açıklama
+count_if(cond) koşulu sağlayanları sayar.
+Toplama bölerek oranı elde ederiz.
+
+
+
+SQL çözümü (CASE ile)
+ratio_sql = spark.sql("""
+  SELECT
+    class,
+    AVG(CASE WHEN score >= 80 THEN 1 ELSE 0 END) AS ratio_ge_80
+  FROM scores
+  GROUP BY class
+""")
+ratio_sql.show()
+
+
+Açıklama
+CASE WHEN ... THEN 1 ELSE 0 END ile boolean’ı sayısala çevirip AVG alıyoruz.
