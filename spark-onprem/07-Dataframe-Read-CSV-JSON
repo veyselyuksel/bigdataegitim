@@ -1,0 +1,203 @@
+1- Örnek csv dosya
+data.csv
+name,class,score
+alice,A,85
+bob,B,90
+eric,A,60
+
+2- Örnek json dosya- fazladan kolon var. Not: JSON tarafında city var; CSV’de yok. Bunu union öncesi unionByName(allowMissingColumns=True) veya kolonları hizalayarak çözeceğiz.
+
+data.json
+[
+  {"name": "carl",  "class": "A", "score": 78, "city": "izmir"},
+  {"name": "dina",  "class": "B", "score": 92, "city": "ankara"},
+  {"name": "fatma", "class": "C", "score": 88, "city": "istanbul"}
+]
+
+
+3- 
+
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+
+spark = (SparkSession.builder
+         .appName("CSV+JSON Union Example")
+         .getOrCreate())
+
+# --- CSV'yi oku ---
+df_csv = (spark.read
+    .option("header", True)
+    .option("inferSchema", True)   # demo için
+    .csv("/home/spark/data.csv")
+    .withColumn("source", F.lit("csv")))
+
+# CSV'de city yok; union sırasında hizalamak için ekleyelim (null)
+df_csv = df_csv.withColumn("city", F.lit(None).cast("string"))
+
+# --- JSON'u oku ---
+df_json = (spark.read
+    .option("multiline", True)     # JSON array için
+    .json("/home/spark/data.json")
+    .withColumn("source", F.lit("json")))
+
+# Tipleri netleştirelim (union'da sorun çıkmasın)
+df_csv = df_csv.select(
+    F.col("name").cast("string"),
+    F.col("class").cast("string"),
+    F.col("score").cast("int"),
+    F.col("city").cast("string"),
+    F.col("source")
+)
+
+df_json = df_json.select(
+    F.col("name").cast("string"),
+    F.col("class").cast("string"),
+    F.col("score").cast("int"),
+    F.col("city").cast("string"),
+    F.col("source")
+)
+
+# --- Birleştir (kolon adları aynı hizadaysa unionByName şart değil, ama güvenli tercih) ---
+df_all = df_csv.unionByName(df_json, allowMissingColumns=True)
+
+print("=== Birleşik DataFrame (CSV+JSON) ===")
+df_all.show(truncate=False)
+df_all.printSchema()
+
+# Küçük analizler:
+print("Kayıt sayısı:", df_all.count())  # 6 kayıt: 3 CSV + 3 JSON
+
+# 80+ skorlar
+df_all.filter(F.col("score") >= 80).show()
+
+# class bazında özet
+(df_all.groupBy("class")
+      .agg(F.count("*").alias("cnt"), F.avg("score").alias("avg_score"))
+      .orderBy(F.desc("avg_score"))
+      .show())
+
+# Kaynağa göre dağılım
+(df_all.groupBy("source").count().show())
+
+
+# --- SQL ile her sınıftaki en yüksek puan (sadece skor) ---
+df_all.createOrReplaceTempView("scores_all")
+
+spark.sql("""
+    SELECT class,
+           MAX(score) AS max_score
+    FROM scores_all
+    GROUP BY class
+    ORDER BY class
+""").show()
+
+# --- SQL ile her sınıftaki en yüksek puanı alan KİŞİ(ler) + skor ---
+# (Eşit puan durumunda hepsini döndürür: RANK() kullanıyoruz)
+spark.sql("""
+    SELECT class, name, score
+    FROM (
+        SELECT
+            class,
+            name,
+            score,
+            RANK() OVER (PARTITION BY class ORDER BY score DESC) AS rnk
+        FROM scores_all
+    )
+    WHERE rnk = 1
+    ORDER BY class, name
+""").show()
+
+
+
+
+
+
+
+**********AÇIKLAMA*************
+
+spark = (SparkSession.builder
+         .appName("CSV+JSON Union Example")  # Uygulama adı belirleniyor
+         .getOrCreate())                      # SparkSession başlatılıyor
+
+# --- CSV'yi oku ---
+df_csv = (spark.read
+    .option("header", True)                  # İlk satır kolon isimleri olarak kullanılacak
+    .option("inferSchema", True)              # Veri tiplerini otomatik algıla (demo amaçlı)
+    .csv("/home/spark/data.csv")              # CSV dosyasının yolu
+    .withColumn("source", F.lit("csv")))      # Kaynağı belirten ek kolon ekle ("csv")
+
+# CSV'de city yok; union sırasında hizalamak için ekleyelim (null)
+df_csv = df_csv.withColumn("city", F.lit(None).cast("string"))  # Eksik kolon city ekleniyor, null değer
+
+# --- JSON'u oku ---
+df_json = (spark.read
+    .option("multiline", True)                # JSON dosyası bir array ise satır sonları dikkate alınsın
+    .json("/home/spark/data.json")             # JSON dosyasının yolu
+    .withColumn("source", F.lit("json")))      # Kaynağı belirten ek kolon ekle ("json")
+
+# Tipleri netleştirelim (union'da sorun çıkmasın)
+df_csv = df_csv.select(
+    F.col("name").cast("string"),             # name string tipinde
+    F.col("class").cast("string"),            # class string tipinde
+    F.col("score").cast("int"),               # score int tipinde
+    F.col("city").cast("string"),             # city string tipinde
+    F.col("source")                           # source string (zaten eklenmiş)
+)
+
+df_json = df_json.select(
+    F.col("name").cast("string"),
+    F.col("class").cast("string"),
+    F.col("score").cast("int"),
+    F.col("city").cast("string"),
+    F.col("source")
+)
+
+# --- Birleştir ---
+df_all = df_csv.unionByName(df_json, allowMissingColumns=True)  # Kolon isimlerine göre birleştir (güvenli yöntem)
+
+print("=== Birleşik DataFrame (CSV+JSON) ===")
+df_all.show(truncate=False)       # Tüm verileri satır kırpmadan göster
+df_all.printSchema()              # DataFrame şemasını göster
+
+# Küçük analizler:
+print("Kayıt sayısı:", df_all.count())  # Tüm satırların sayısı
+
+# 80+ skorlar
+df_all.filter(F.col("score") >= 80).show()  # score >= 80 olan satırları göster
+
+# class bazında özet
+(df_all.groupBy("class")                   # class'a göre grupla
+      .agg(F.count("*").alias("cnt"),       # satır sayısı
+           F.avg("score").alias("avg_score"))  # ortalama score
+      .orderBy(F.desc("avg_score"))         # ortalama score'a göre azalan sırala
+      .show())
+
+# Kaynağa göre dağılım
+(df_all.groupBy("source").count().show())  # CSV ve JSON kaynaklarının dağılımı
+
+# --- SQL ile her sınıftaki en yüksek puan (sadece skor) ---
+df_all.createOrReplaceTempView("scores_all")  # DataFrame'i SQL sorguları için temp view olarak kaydet
+
+spark.sql("""
+    SELECT class,
+           MAX(score) AS max_score         -- Her sınıfın maksimum puanı
+    FROM scores_all
+    GROUP BY class
+    ORDER BY class
+""").show()
+
+# --- SQL ile her sınıftaki en yüksek puanı alan KİŞİ(ler) + skor ---
+# Eşit puan varsa hepsini döndürmek için RANK() kullanıyoruz
+spark.sql("""
+    SELECT class, name, score
+    FROM (
+        SELECT
+            class,
+            name,
+            score,
+            RANK() OVER (PARTITION BY class ORDER BY score DESC) AS rnk
+        FROM scores_all
+    )
+    WHERE rnk = 1                      -- Sadece en yüksek puana sahip olan(lar)
+    ORDER BY class, name
+""").show()
