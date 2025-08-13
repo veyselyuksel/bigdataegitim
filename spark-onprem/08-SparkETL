@@ -1,0 +1,326 @@
+Ne yapacağız?
+Extract: customers.csv + orders.csv dosyalarını okuyacağız
+Transform: temizleme, tip dönüşümü, join, agregasyon, zenginleştirme
+Load: sonuçları Parquet ve (gerekirse) tek dosyalı CSV olarak yazacağız
+
+
+/home/spark/etl_demo/
+  ├── etl_demo.py
+  ├── input/
+  │   ├── customers.csv
+  │   └── orders.csv
+  └── output/           (script oluşturur)
+
+
+Örnek input dosyaları (CSV)
+input/customers.csv
+
+customer_id,name,region
+101,Alice,EMEA
+102,Bob,APAC
+103,Carl,EMEA
+104,Dina,APAC
+105,Eric,EMEA
+
+input/orders.csv
+
+order_id,customer_id,order_amount,order_date
+9001,101,1200.50,2024-11-01
+9002,102, 800.00,2024-11-03
+9003,103,2000.00,2024-11-07
+9004,104,1500.25,2024-11-10
+9005,105,  60.00,2024-11-12
+9006,101, 300.00,2024-12-05
+
+
+ETL script*********************
+
+from pyspark.sql import SparkSession, functions as F, types as T
+from pyspark import StorageLevel
+import os
+
+# -----------------------------
+# Parametreler (gerekirse değiştir)
+# -----------------------------
+BASE = "/home/spark/etl_demo"             # proje kökü
+IN  = os.path.join(BASE, "input")         # input klasörü
+OUT = os.path.join(BASE, "output")        # output klasörü
+os.makedirs(OUT, exist_ok=True)
+
+CUSTOMERS_PATH = os.path.join(IN, "customers.csv")
+ORDERS_PATH    = os.path.join(IN, "orders.csv")
+
+spark = (SparkSession.builder
+         .appName("ETL Demo - CSV to Parquet/CSV")
+         .config("spark.sql.shuffle.partitions", 8)     # eğitim için düşük tut
+         .getOrCreate())
+
+# -------------------------------------------------------
+# 1) EXTRACT — CSV dosyalarını DataFrame olarak oku
+# -------------------------------------------------------
+# Schema açık vermek prod’da daha iyi pratik (inferSchema yerine)
+customers_schema = T.StructType([
+    T.StructField("customer_id", T.IntegerType(), False),
+    T.StructField("name",        T.StringType(),  True),
+    T.StructField("region",      T.StringType(),  True),
+])
+
+orders_schema = T.StructType([
+    T.StructField("order_id",     T.IntegerType(), False),
+    T.StructField("customer_id",  T.IntegerType(), False),
+    T.StructField("order_amount", T.DoubleType(),  True),
+    T.StructField("order_date",   T.StringType(),  True),  # string okuyup to_date yapacağız
+])
+
+df_customers = (spark.read
+    .option("header", True)
+    .schema(customers_schema)
+    .csv(CUSTOMERS_PATH))
+
+df_orders = (spark.read
+    .option("header", True)
+    .schema(orders_schema)
+    .csv(ORDERS_PATH))
+
+# Hızlı kontrol
+print("Customers:"); df_customers.show()
+print("Orders:");    df_orders.show()
+
+# -------------------------------------------------------
+# 2) TRANSFORM — temizleme, tip dönüşümü, join, agregasyon
+# -------------------------------------------------------
+
+# 2.1 Tarih tipine çevir + null kayıt temizliği
+df_orders_typed = (df_orders
+    .withColumn("order_date", F.to_date("order_date", "yyyy-MM-dd"))
+    .dropna(subset=["customer_id", "order_amount"])
+)
+
+# 2.2 İş kuralları: negatif/0 siparişleri dışla (örnek)
+df_orders_clean = df_orders_typed.filter(F.col("order_amount") > 0)
+
+# 2.3 Join (customers × orders)
+df_joined = (df_orders_clean
+    .join(df_customers, on="customer_id", how="inner"))
+
+# 2.4 Zenginleştirme: yıl/ay kolonları + high_value flag
+df_enriched = (df_joined
+    .withColumn("order_year", F.year("order_date"))
+    .withColumn("order_month", F.month("order_date"))
+    .withColumn("is_high_value", (F.col("order_amount") >= 1000).cast("boolean"))
+)
+
+# 2.5 Agregasyon — müşteri başına toplam harcama, sipariş sayısı, son sipariş tarihi
+df_customer_agg = (df_enriched
+    .groupBy("customer_id", "name", "region")
+    .agg(
+        F.count("*").alias("order_cnt"),
+        F.sum("order_amount").alias("total_spent"),
+        F.max("order_date").alias("last_order_date"),
+        F.sum(F.col("is_high_value").cast("int")).alias("high_value_orders")
+    )
+    .orderBy(F.desc("total_spent"))
+)
+
+# 2.6 Bölge/yıl bazında özet (opsiyonel örnek)
+df_region_year = (df_enriched
+    .groupBy("region", "order_year")
+    .agg(
+        F.count("*").alias("orders"),
+        F.avg("order_amount").alias("avg_amount"),
+        F.sum("order_amount").alias("sum_amount")
+    )
+    .orderBy("region", "order_year")
+)
+
+# Cache örneği (aynı DF’yi birkaç yerde kullanacaksak)
+df_customer_agg.persist(StorageLevel.MEMORY_AND_DISK)
+df_customer_agg.count()  # materialize
+
+# -------------------------------------------------------
+# 3) LOAD — çıktıların yazılması
+# -------------------------------------------------------
+
+# 3.1 Parquet (columnar, hızlı okuma/yazma)
+out_parquet_1 = os.path.join(OUT, "customer_metrics_parquet")
+df_customer_agg.write.mode("overwrite").parquet(out_parquet_1)
+
+out_parquet_2 = os.path.join(OUT, "region_year_metrics_parquet")
+df_region_year.write.mode("overwrite").parquet(out_parquet_2)
+
+# 3.2 CSV (tek dosya yazmak için coalesce)
+out_csv_1 = os.path.join(OUT, "customer_metrics_csv")
+(df_customer_agg
+    .coalesce(1)  # demo için tek dosya
+    .write.mode("overwrite").option("header", True).csv(out_csv_1))
+
+# 3.3 SQL ile de erişmek istersen temp view oluştur
+df_customer_agg.createOrReplaceTempView("customer_metrics")
+spark.sql("""
+    SELECT region,
+           COUNT(*) AS customers,
+           SUM(total_spent) AS sum_spent
+    FROM customer_metrics
+    GROUP BY region
+    ORDER BY sum_spent DESC
+""").show()
+
+# (İş bittiğinde cache/persist’i temizlemek iyi pratik)
+df_customer_agg.unpersist()
+
+print("Yazılan klasörler:")
+print(" -", out_parquet_1)
+print(" -", out_parquet_2)
+print(" -", out_csv_1)
+
+spark.stop()
+
+
+
+
+
+
+AÇIKLAMA************
+
+from pyspark.sql import SparkSession, functions as F, types as T   # SparkSession (giriş noktası), fonksiyonlar ve tipler
+from pyspark import StorageLevel                                   # Persist/Cache seviyelerini seçmek için
+import os                                                          # Dosya/dizin işlemleri için
+
+# -----------------------------
+# Parametreler (gerekirse değiştir)
+# -----------------------------
+BASE = "/home/spark/etl_demo"             # Proje kök klasörü (tüm path'ler bunun altında)
+IN  = os.path.join(BASE, "input")         # Girdi dosyalarının bulunduğu klasör
+OUT = os.path.join(BASE, "output")        # Çıktıların yazılacağı klasör
+os.makedirs(OUT, exist_ok=True)           # Çıkış klasörü yoksa oluştur (tekrar çalıştırmada hata vermesin)
+
+CUSTOMERS_PATH = os.path.join(IN, "customers.csv")  # customers CSV tam yolu
+ORDERS_PATH    = os.path.join(IN, "orders.csv")     # orders CSV tam yolu
+
+spark = (SparkSession.builder
+         .appName("ETL Demo - CSV to Parquet/CSV")  # Spark uygulama adı (UI'da görünür)
+         .config("spark.sql.shuffle.partitions", 8)  # Shuffle sonrası kullanılacak partition sayısı (demo için düşük)
+         .getOrCreate())                             # SparkSession oluştur/geri getir
+
+# -------------------------------------------------------
+# 1) EXTRACT — CSV dosyalarını DataFrame olarak oku
+# -------------------------------------------------------
+# Schema açık vermek prod’da daha iyi pratik (inferSchema yerine)  # Şemayı kodla belirlemek tip/performans için güvenli
+
+customers_schema = T.StructType([                                   # customers için şema
+    T.StructField("customer_id", T.IntegerType(), False),           # Zorunlu tamsayı müşteri id
+    T.StructField("name",        T.StringType(),  True),            # İsim (opsiyonel)
+    T.StructField("region",      T.StringType(),  True),            # Bölge (opsiyonel)
+])
+
+orders_schema = T.StructType([                                      # orders için şema
+    T.StructField("order_id",     T.IntegerType(), False),          # Sipariş id (zorunlu)
+    T.StructField("customer_id",  T.IntegerType(), False),          # Müşteri id (zorunlu) – join anahtarımız
+    T.StructField("order_amount", T.DoubleType(),  True),           # Sipariş tutarı (opsiyonel)
+    T.StructField("order_date",   T.StringType(),  True),           # Tarihi string alıp to_date ile çevireceğiz
+])
+
+df_customers = (spark.read
+    .option("header", True)                                         # İlk satırı kolon adı olarak kabul et
+    .schema(customers_schema)                                       # Belirlediğimiz şemayı kullan
+    .csv(CUSTOMERS_PATH))                                           # CSV'yi oku → DataFrame oluştur
+
+df_orders = (spark.read
+    .option("header", True)                                         # İlk satır başlık
+    .schema(orders_schema)                                          # Belirlenen şema
+    .csv(ORDERS_PATH))                                              # Orders CSV'yi oku
+
+# Hızlı kontrol
+print("Customers:"); df_customers.show()                            # Customers verisini tablo gibi göster
+print("Orders:");    df_orders.show()                               # Orders verisini göster (gözle kontrol için)
+
+# -------------------------------------------------------
+# 2) TRANSFORM — temizleme, tip dönüşümü, join, agregasyon
+# -------------------------------------------------------
+
+# 2.1 Tarih tipine çevir + null kayıt temizliği
+df_orders_typed = (df_orders
+    .withColumn("order_date", F.to_date("order_date", "yyyy-MM-dd"))  # String tarih → Date tipine dönüştür
+    .dropna(subset=["customer_id", "order_amount"])                   # Join ve hesaplama için kritik alanlar null olamaz
+)
+
+# 2.2 İş kuralları: negatif/0 siparişleri dışla (örnek)
+df_orders_clean = df_orders_typed.filter(F.col("order_amount") > 0)   # 0 veya negatif tutarları ele (veri kalitesi)
+
+# 2.3 Join (customers × orders)
+df_joined = (df_orders_clean
+    .join(df_customers, on="customer_id", how="inner"))               # customer_id üzerinden inner join (sadece eşleşenler)
+
+# 2.4 Zenginleştirme: yıl/ay kolonları + high_value flag
+df_enriched = (df_joined
+    .withColumn("order_year", F.year("order_date"))                   # Yıl kolonu (raporlama için yararlı)
+    .withColumn("order_month", F.month("order_date"))                 # Ay kolonu
+    .withColumn("is_high_value", (F.col("order_amount") >= 1000).cast("boolean"))  # 1000+ siparişleri işaretle
+)
+
+# 2.5 Agregasyon — müşteri başına toplam harcama, sipariş sayısı, son sipariş tarihi
+df_customer_agg = (df_enriched
+    .groupBy("customer_id", "name", "region")                         # Müşteri bazında grupla
+    .agg(
+        F.count("*").alias("order_cnt"),                              # Sipariş adedi
+        F.sum("order_amount").alias("total_spent"),                   # Toplam harcama
+        F.max("order_date").alias("last_order_date"),                 # Son sipariş tarihi
+        F.sum(F.col("is_high_value").cast("int")).alias("high_value_orders")  # Yüksek tutarlı sipariş adedi
+    )
+    .orderBy(F.desc("total_spent"))                                   # Toplam harcamaya göre azalan sırala
+)
+
+# 2.6 Bölge/yıl bazında özet (opsiyonel örnek)
+df_region_year = (df_enriched
+    .groupBy("region", "order_year")                                  # Bölge + Yıl kırılımında
+    .agg(
+        F.count("*").alias("orders"),                                 # Sipariş sayısı
+        F.avg("order_amount").alias("avg_amount"),                    # Ortalama tutar
+        F.sum("order_amount").alias("sum_amount")                     # Toplam tutar
+    )
+    .orderBy("region", "order_year")                                  # Okunabilirlik için sıralama
+)
+
+# Cache örneği (aynı DF’yi birkaç yerde kullanacaksak)
+df_customer_agg.persist(StorageLevel.MEMORY_AND_DISK)                 # Bellek yetmezse diske spill edebilsin
+df_customer_agg.count()                                               # İlk action: DF'yi materialize eder ve cache'e yükler
+
+# -------------------------------------------------------
+# 3) LOAD — çıktıların yazılması
+# -------------------------------------------------------
+
+# 3.1 Parquet (columnar, hızlı okuma/yazma)
+out_parquet_1 = os.path.join(OUT, "customer_metrics_parquet")         # Müşteri metrikleri için parquet çıkış klasörü
+df_customer_agg.write.mode("overwrite").parquet(out_parquet_1)        # Var ise üzerine yaz
+
+out_parquet_2 = os.path.join(OUT, "region_year_metrics_parquet")      # Bölge-yıl metrikleri için çıkış klasörü
+df_region_year.write.mode("overwrite").parquet(out_parquet_2)         # Parquet olarak yaz
+
+# 3.2 CSV (tek dosya yazmak için coalesce)
+out_csv_1 = os.path.join(OUT, "customer_metrics_csv")                 # CSV çıkış klasörü
+(df_customer_agg
+    .coalesce(1)                                                      # Demo için tek dosya üret (prod’da küçük dosya sorunu yaratabilir)
+    .write.mode("overwrite").option("header", True).csv(out_csv_1))   # Başlık satırıyla CSV yaz
+
+# 3.3 SQL ile de erişmek istersen temp view oluştur
+df_customer_agg.createOrReplaceTempView("customer_metrics")           # SQL'de kullanılacak geçici view oluştur
+
+# Aşağıdaki sorgu: bölge bazında müşteri sayısı ve toplam harcama
+spark.sql("""
+    SELECT region,
+           COUNT(*) AS customers,
+           SUM(total_spent) AS sum_spent
+    FROM customer_metrics
+    GROUP BY region
+    ORDER BY sum_spent DESC
+""").show()                                                           # Sonucu göster (UI'da planı da inceleyebilirsin)
+
+# (İş bittiğinde cache/persist’i temizlemek iyi pratik)
+df_customer_agg.unpersist()                                           # Cache/persist'i serbest bırak
+
+print("Yazılan klasörler:")                                           # Çıktı patikalarını yazdır
+print(" -", out_parquet_1)
+print(" -", out_parquet_2)
+print(" -", out_csv_1)
+
+spark.stop()              
