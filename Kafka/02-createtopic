@@ -1,0 +1,47 @@
+Yeni bir topic oluşturmak
+/opt/kafka/bin/kafka-topics.sh \
+  --create \
+  --bootstrap-server spark-master:9092 \
+  --replication-factor 2 \
+  --partitions 3 \
+  --topic sampletopic1
+
+
+--create → yeni bir topic oluşturur.
+--bootstrap-server spark-master:9092 → hangi broker üzerinden cluster’a bağlanacağını belirtir. Burada spark-master broker’ını kullanıyoruz.
+--replication-factor 2 → topic için 2 replikalı yapılandırma yapılır. (1 master + 2 worker ortamında mantıklı).
+--partitions 3 → topic 3 partition ile oluşturulur.
+--topic sampletopic1 → oluşturulacak topic’in adı.
+
+Topiği kontrol etmek için
+Bu komut sana partition bilgilerini, leader broker’ı ve replica assignment’ı gösterecektir.
+
+/opt/kafka/bin/kafka-topics.sh \
+  --describe \
+  --bootstrap-server spark-master:9092 \
+  --topic sampletopic1
+
+Bu topiğe console producer'dan mesajları gönderelim ve başka bir terminalden consumer açarak mesajların geldiğinden emin olalım
+  
+[kafka@spark-master ~]$ /opt/kafka/bin/kafka-console-producer.sh \
+--bootstrap-server spark-master:9092 \
+--topic sampletopic1
+>hello 
+>ben veysel 
+>yüksel
+
+[kafka@spark-worker-0 ~]$ /opt/kafka/bin/kafka-console-consumer.sh \
+--bootstrap-server spark-master:9092,spark-worker-0:9092 \
+--topic sampletopic1 \
+--from-beginning
+
+hello 
+ben veysel 
+yüksel
+
+From beggining kaldırılır ise son okunan mesajdan sonrası gelir.
+
+
+
+
+  
