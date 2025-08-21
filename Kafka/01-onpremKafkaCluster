@@ -1,0 +1,168 @@
+1-
+/etc/hosts dosyasına spark-master ve spark-worker-0 eklenir.
+
+spark-master (10.0.0.10) → controller + broker, portlar: 9093 (controller), 9092 (broker)
+spark-worker-0 (10.0.0.11) → broker, port: 9092
+/etc/hosts her iki makinede birbiriyle çözülebilmeli:
+
+10.0.0.10  spark-master
+10.0.0.11  spark-worker-0
+
+
+2- 
+Her iki sunucuda da 
+# 1. Java (OpenJDK 17 önerilir)
+sudo dnf install -y java-17-openjdk
+
+# 2. kafka kullanıcı/grup
+sudo useradd -r -m -d /opt/kafka kafka 
+
+# 3. Dizinler
+sudo mkdir -p /opt/kafka/{bin,config,logs}
+sudo mkdir -p /data/kafka-logs          # broker log segmentleri
+sudo mkdir -p /data/kraft-metadata      # controller metadata (sadece controller node'da kullanılır)
+sudo chown -R kafka:kafka /opt/kafka /data
+
+3-
+export KAFKA_VER=3.7.0
+export SCALA_VER=2.13
+cd /tmp
+curl -LO https://downloads.apache.org/kafka/${KAFKA_VER}/kafka_${SCALA_VER}-${KAFKA_VER}.tgz
+sudo tar -xf kafka_${SCALA_VER}-${KAFKA_VER}.tgz -C /opt/kafka --strip-components=1
+sudo chown -R kafka:kafka /opt/kafka
+
+4- 
+kafka user ile uuid oluştur ve bu uuid'yi sakla
+
+/opt/kafka/bin/kafka-storage.sh random-uuid
+
+5-  Konfigürasyonlar - kafka user ile
+
+5.1 spark-master (controller + broker) için /opt/kafka/config/server.properties
+
+# KRaft ayarları
+process.roles=broker,controller
+node.id=1
+
+# Dinleyiciler
+controller.listener.names=CONTROLLER
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+advertised.listeners=PLAINTEXT://spark-master:9092
+
+# Controller quorum (sadece controller'lar listelenir)
+controller.quorum.voters=1@spark-master:9093
+
+# Depo dizinleri
+log.dirs=/data/kafka-logs
+metadata.log.dir=/data/kraft-metadata
+
+# Ağ & IO
+num.network.threads=3
+num.io.threads=8
+
+# Topic varsayılanları (isteğe göre)
+num.partitions=3
+default.replication.factor=2
+min.insync.replicas=1
+
+# Log temizleme
+log.retention.hours=168
+log.segment.bytes=1073741824
+# Gerekirse: log.cleanup.policy=delete
+
+# Diğer
+auto.create.topics.enable=false
+offsets.topic.replication.factor=2
+transaction.state.log.replication.factor=2
+transaction.state.log.min.isr=1
+-----
+5.2 spark-worker-0 (sadece broker) için /opt/kafka/config/server.properties
+# KRaft ayarları
+process.roles=broker
+node.id=2
+
+# Dinleyiciler
+listeners=PLAINTEXT://:9092
+advertised.listeners=PLAINTEXT://spark-worker-0:9092
+controller.listener.names=CONTROLLER
+
+# Controller (quorum voters) - broker'da da tanımlanır
+controller.quorum.voters=1@spark-master:9093
+
+# Depo
+log.dirs=/data/kafka-logs
+# metadata.log.dir sadece controller'da gerekir
+
+# Ağ & IO
+num.network.threads=3
+num.io.threads=8
+
+# Topic varsayılanları
+num.partitions=3
+default.replication.factor=2
+min.insync.replicas=1
+
+# Log temizleme
+log.retention.hours=168
+log.segment.bytes=1073741824
+
+# Diğer
+auto.create.topics.enable=false
+offsets.topic.replication.factor=2
+transaction.state.log.replication.factor=2
+transaction.state.log.min.isr=1
+
+
+
+6-Cluster setup iki sunucuda da üretilen uuid ile çalıştırılır. - kafka user ile
+
+export CLUSTER_ID="Jf2x-...-YOUR-ID"   # master'da ürettiğiniz ID
+/opt/kafka/bin/kafka-storage.sh format \
+  -t $CLUSTER_ID \
+  -c /opt/kafka/config/server.properties
+
+7- iki sunucuda da kafka servisleri ayarlanır
+sudo yetkili bir user ile vi /etc/systemd/system/kafka.service dosyası oluşturularak aşağıdaki içerik kopyalanır.
+[Unit]
+Description=Apache Kafka (KRaft)
+After=network.target
+
+[Service]
+Type=simple
+User=kafka
+Group=kafka
+Environment="KAFKA_HEAP_OPTS=-Xms1G -Xmx1G"
+ExecStart=/opt/kafka/bin/kafka-server-start.sh /opt/kafka/config/server.properties
+ExecStop=/opt/kafka/bin/kafka-server-stop.sh
+Restart=on-failure
+LimitNOFILE=100000
+
+[Install]
+WantedBy=multi-user.target
+
+8- sudo yetkili user ile iki sunucuda da servisler başlatılır.
+sudo systemctl daemon-reload
+sudo systemctl enable --now kafka
+
+
+
+9- brokerları listele
+
+/opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server spark-master:9092 --status
+
+
+10-
+
+/opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server spark-master:9092 \
+  --group demo-cg \
+  --topic demo-topic \
+  --reset-offsets --to-earliest --execute
+
+
+
+/opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server spark-master:9092 \
+  --group demo-cg \
+  --topic demo-topic \
+  --reset-offsets --to-earliest --execute
