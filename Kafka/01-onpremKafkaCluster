@@ -24,12 +24,18 @@ sudo mkdir -p /data/kraft-metadata      # controller metadata (sadece controller
 sudo chown -R kafka:kafka /opt/kafka /data
 
 3-
-export KAFKA_VER=3.7.0
+export KAFKA_VER=4.0.0
 export SCALA_VER=2.13
 cd /tmp
 curl -LO https://downloads.apache.org/kafka/${KAFKA_VER}/kafka_${SCALA_VER}-${KAFKA_VER}.tgz
-sudo tar -xf kafka_${SCALA_VER}-${KAFKA_VER}.tgz -C /opt/kafka --strip-components=1
+sudo tar -zxvf kafka_${SCALA_VER}-${KAFKA_VER}.tgz -C /opt/kafka --strip-components=1
 sudo chown -R kafka:kafka /opt/kafka
+--------
+
+
+
+------
+
 
 4- 
 kafka user ile uuid oluştur ve bu uuid'yi sakla
