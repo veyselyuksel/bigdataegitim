@@ -85,3 +85,10 @@ py-consumer-kp  sampletopic1    0          1               1               0    
 py-consumer-kp  sampletopic1    1          9               9               0               kafka-python-2.2.15-78107872-8a90-4b70-ac2c-9bef69b6a654 /34.61.10.93    kafka-python-2.2.15
 [kafka@spark-worker-0 ~]$ 
 
+Çıktıda şunları görürsün:
+TOPIC (hangi topici dinlediği)
+PARTITION (hangi partition’a abone olduğu)
+CURRENT-OFFSET (consumer’ın işlediği son offset)
+LOG-END-OFFSET (partition’da en son mesaj offset’i)
+LAG (kalan fark → tüketilmemiş mesaj sayısı)
+CONSUMER-ID / HOST / CLIENT-ID bilgileri
