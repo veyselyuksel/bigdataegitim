@@ -1,0 +1,146 @@
+
+sudo python3 -m pip install kafka-python
+
+1- vi ile consumer.py dosyası oluşturulur ve aşağıdaki kodlar eklenir.
+
+# producer_kafkapython.py
+from kafka import KafkaProducer
+import sys
+
+producer = KafkaProducer(
+    bootstrap_servers=["spark-master:9092", "spark-worker-0:9092"],
+    value_serializer=lambda v: v.encode("utf-8"),
+    client_id="py-producer-kp"
+)
+
+topic = "sampletopic1"
+print("Satır yaz ve Enter'a bas (Ctrl+C ile çık):")
+try:
+    for line in sys.stdin:
+        line = line.strip()
+        if line:
+            future = producer.send(topic, value=line)
+            # İstersen senkron bekleme:
+            # record_metadata = future.get(timeout=10)
+            # print(record_metadata.topic, record_metadata.partition, record_metadata.offset)
+except KeyboardInterrupt:
+    pass
+finally:
+    producer.flush()
+    producer.close()
+
+1-Açıklamalı
+
+from kafka import KafkaProducer      # Kafka producer kütüphanesini import ediyoruz
+import sys                           # Konsoldan satır okumak için sys modülü
+
+# Producer nesnesini oluşturuyoruz
+producer = KafkaProducer(
+    bootstrap_servers=["spark-master:9092", "spark-worker-0:9092"],  # Kafka broker adresleri
+    value_serializer=lambda v: v.encode("utf-8"),  # Gönderilecek mesajları UTF-8 string'e çevirir
+    client_id="py-producer-kp"                     # Producer kimliği (loglarda görünecek)
+)
+
+topic = "sampletopic1"              # Mesajların gönderileceği topic adı
+print("Satır yaz ve Enter'a bas (Ctrl+C ile çık):")  # Kullanıcıya bilgi veriyoruz
+
+try:
+    for line in sys.stdin:          # Konsoldan satır satır girdi okuyoruz
+        line = line.strip()         # Satırın başındaki/sonundaki boşlukları temizle
+        if line:                    # Eğer boş satır değilse
+            future = producer.send(topic, value=line)  # Mesajı Kafka'ya gönder
+            # İstersen senkron bekleme (metadata almak için):
+            # record_metadata = future.get(timeout=10)  # Gönderim tamamlanana kadar bekler
+            # print(record_metadata.topic,             # Hangi topic'e yazıldı
+            #       record_metadata.partition,         # Hangi partition'a yazıldı
+            #       record_metadata.offset)            # Offset değeri
+except KeyboardInterrupt:            # Ctrl+C ile çıkıldığında
+    pass
+finally:
+    producer.flush()                 # Gönderilmeyi bekleyen mesajları gönder
+    producer.close()                 # Producer bağlantısını kapat
+
+
+2- consumer.py dosyasını oluşturarak içeriği aşağıdaki gibi ayarla.
+
+from kafka import KafkaConsumer
+
+consumer = KafkaConsumer(
+    "sampletopic1",
+    bootstrap_servers=["spark-master:9092", "spark-worker-0:9092"],
+    group_id="py-consumer-kp",
+    auto_offset_reset="earliest",           # grup yoksa baştan
+    enable_auto_commit=True,
+    value_deserializer=lambda b: b.decode("utf-8"),
+)
+
+print("Mesajlar dinleniyor (Ctrl+C ile çık)…")
+try:
+    for msg in consumer:
+        print(f"{msg.topic}[{msg.partition}]@{msg.offset} -> {msg.value}")
+except KeyboardInterrupt:
+    pass
+finally:
+    consumer.close()
+
+2- Açıklama
+from kafka import KafkaConsumer   # Kafka consumer kütüphanesini import ediyoruz
+
+# KafkaConsumer nesnesini oluşturuyoruz
+consumer = KafkaConsumer(
+    "sampletopic1",                         # Dinlenecek topic adı
+    bootstrap_servers=["spark-master:9092", "spark-worker-0:9092"],  # Broker adresleri
+    group_id="py-consumer-kp",              # Consumer Group kimliği (aynı gruptaki consumer’lar işi paylaşır)
+    auto_offset_reset="earliest",           # Daha önce offset kaydı yoksa en baştan (earliest) başlat
+    enable_auto_commit=True,                # Mesaj okundukça offset otomatik commit edilsin
+    value_deserializer=lambda b: b.decode("utf-8"),  # Mesaj byte → string dönüşümü
+)
+
+print("Mesajlar dinleniyor (Ctrl+C ile çık)…")   # Kullanıcıya bilgi veriyoruz
+
+try:
+    for msg in consumer:   # Gelen her mesaj için döngü
+        # Mesajın detaylarını yazdır: topic adı, partition numarası, offset ve mesaj içeriği
+        print(f"{msg.topic}[{msg.partition}]@{msg.offset} -> {msg.value}")
+except KeyboardInterrupt:   # Ctrl+C ile çıkıldığında
+    pass
+finally:
+    consumer.close()        # Consumer bağlantısını kapat
+
+3- producer.py çalıştırılarak topiğe mesajlar gönderilir.
+
+[veritabaniegitimleri@spark-master ~]$ python3 producer.py 
+Satır yaz ve Enter'a bas (Ctrl+C ile çık):
+merhaba kafka eğitimine hoş geldiniz
+bu deneme mesajlarıdır
+
+4- consumer.py çalıştırılarak mesajlar okunur.
+[veritabaniegitimleri@spark-master ~]$ python3 consumer_kafka.py 
+Mesajlar dinleniyor (Ctrl+C ile çık)…
+sampletopic1[0]@0 -> merhaba kafka eğitimine hoş geldiniz
+sampletopic1[1]@0 -> hello 
+sampletopic1[1]@1 -> ben veysel 
+sampletopic1[1]@2 -> yüksel
+sampletopic1[1]@3 -> mesjları oku
+sampletopic1[1]@4 -> selam
+sampletopic1[1]@5 -> naber
+sampletopic1[1]@6 -> geldimi
+sampletopic1[1]@7 -> exit
+sampletopic1[1]@8 -> bu deneme mesajlarıdır
+
+
+5- mesajlar karışık geldi bu davranış normal mi?
+
+Bu davranış normaldir.
+Kafka sıralamayı sadece “aynı partition” içinde garanti eder; tüm topic (birden çok partition) için “küresel” bir sıra garantisi yoktur. Senin çıktında:
+sampletopic1[0]@0  -> ...
+sampletopic1[1]@0  -> ...
+sampletopic1[1]@1  -> ...
+...
+[...] içindeki sayı partition id’dir.
+@... ise o partition’daki offsettir.
+Consumer, partition 0 ve partition 1’den gelen kayıtları sırayla “karışık” gösterebilir. Her partition kendi içinde sıralıdır (offset artar), ama iki partition’ın kayıtları üretim zamanına göre birleşip tek bir sıra halinde gelmez.
+Ayrıca producer tarafında key vermediğin için Kafka, iletileri partition’lara sticky/round-robin stratejisiyle dağıtır. Bu da mesajların bir kısmının p0’a, bir kısmının p1’e gitmesine yol açar; doğal olarak ekranda “karışık” görünürler.
+
+6- Çözüm : Tek partition veya
+producer.send("sampletopic1", key=b"session-1", value=line)
