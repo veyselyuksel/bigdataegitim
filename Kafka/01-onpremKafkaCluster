@@ -39,7 +39,7 @@ sudo chown -R kafka:kafka /opt/kafka
 
 4- 
 kafka user ile uuid oluştur ve bu uuid'yi sakla (sadece master node)
-
+sudo su - kafka
 /opt/kafka/bin/kafka-storage.sh random-uuid
 
 5-  Konfigürasyonlar - kafka user ile
