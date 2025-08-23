@@ -118,7 +118,7 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 6)Pod Network (CNI) Yükle — Flannel
 
 Yine sadece master node’da çalıştırılır:
-wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+wget https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml  => kube-flannel.yml dosyası içerisindeki 10.244.0.0'lı IP 10.127.0.0 olarak değiştirilir. Biz bu blokta k8s kurulumunu yaptığımız için
 kubectl apply -f kube-flannel.yml
 kubectl get pods -n kube-flannel -w
 
