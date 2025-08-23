@@ -1,7 +1,8 @@
+sudo yetkisi olan bir user ile kafka lib indirilir.
 
 sudo python3 -m pip install kafka-python
 
-1- vi ile consumer.py dosyası oluşturulur ve aşağıdaki kodlar eklenir.
+1- vi ile producer.py dosyası oluşturulur ve aşağıdaki kodlar eklenir.
 
 # producer_kafkapython.py
 from kafka import KafkaProducer
