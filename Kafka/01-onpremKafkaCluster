@@ -166,18 +166,4 @@ tcp6       0      0 :::9093                 :::*                    LISTEN      
 [kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server spark-master01:9092
 
 
-10-
 
-/opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server spark-master:9092 \
-  --group demo-cg \
-  --topic demo-topic \
-  --reset-offsets --to-earliest --execute
-
-
-
-/opt/kafka/bin/kafka-consumer-groups.sh \
-  --bootstrap-server spark-master:9092 \
-  --group demo-cg \
-  --topic demo-topic \
-  --reset-offsets --to-earliest --execute
