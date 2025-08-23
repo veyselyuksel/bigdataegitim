@@ -150,11 +150,20 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now kafka
 
+Servisler başlatıldıktan sonra 9092 portunun aktifliği kontrol edilir.
 
+
+[kafka@spark-master01 ~]$ netstat -tlpn
+(Not all processes could be identified, non-owned process info
+ will not be shown, you would have to be root to see it all.)
+Active Internet connections (only servers)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name                  
+tcp6       0      0 :::9092                 :::*                    LISTEN      107229/java         
+tcp6       0      0 :::9093                 :::*                    LISTEN      107229/java  
 
 9- brokerları listele
 
-/opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server spark-master:9092 --status
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server spark-master01:9092
 
 
 10-
