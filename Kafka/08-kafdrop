@@ -1,0 +1,76 @@
+Görsel arayüz için kafdrop.yaml oluşturulur
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafdrop
+  namespace: kafka
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafdrop
+  template:
+    metadata:
+      labels:
+        app: kafdrop
+    spec:
+      containers:
+        - name: kafdrop
+          image: obsidiandynamics/kafdrop:latest
+          ports:
+            - containerPort: 9000
+          env:
+            - name: KAFKA_BROKERCONNECT
+              value: "10.128.0.8:32396"
+            - name: JVM_OPTS
+              value: "-Xms32M -Xmx64M"
+            - name: SERVER_PORT
+              value: "9000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafdrop
+  namespace: kafka
+spec:
+  type: NodePort
+  selector:
+    app: kafdrop
+  ports:
+    - port: 9000
+      targetPort: 9000
+      nodePort: 30095
+
+
+2) apply edilir.
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl apply -f kafdrop.yaml
+
+kontrol
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka get pods -l app=kafdrop
+NAME                       READY   STATUS    RESTARTS   AGE
+kafdrop-7c85dd599c-sjnqr   1/1     Running   0          13s
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka describe svc kafdrop
+Name:                     kafdrop
+Namespace:                kafka
+Labels:                   <none>
+Annotations:              <none>
+Selector:                 app=kafdrop
+Type:                     NodePort
+IP Family Policy:         SingleStack
+IP Families:              IPv4
+IP:                       10.107.164.57
+IPs:                      10.107.164.57
+Port:                     <unset>  9000/TCP
+TargetPort:               9000/TCP
+NodePort:                 <unset>  30095/TCP
+Endpoints:                10.127.1.67:9000
+Session Affinity:         None
+External Traffic Policy:  Cluster
+Events:                   <none>
+
+daha sonra externalIP ve 30095 protundan webui'ya erişilir.
+
