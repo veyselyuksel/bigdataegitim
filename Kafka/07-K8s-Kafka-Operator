@@ -1,0 +1,245 @@
+1) Kubernetes Operator nedir?
+
+Operator, Kubernetes’in “denetleyici (controller) + CRD (CustomResourceDefinition)” modelini kullanarak belirli bir uygulamanın (Kafka gibi) yaşam döngüsünü otomatik yöneten yazılımdır. İstediğiniz durumu YAML ile tarif edersiniz; operator sürekli durumu izler ve uzlaşma döngüsü (reconciliation loop) ile kümeyi istediğiniz hâle getirir. Bu yaklaşım yalnız kurulum değil; ölçekleme, yükseltme, konfigürasyon değişiklikleri, arıza sonrası iyileşme gibi “Day-2” operasyonları da kapsar.
+Helm chart çoğu zaman “kur ve çık” işini yapar; Strimzi gibi operator’ler ise sürekli izleyip hedef durumu korur. Strimzi’de Helm tipik olarak Cluster Operator’ü kurmak için kullanılır; Kafka kümelerinin kendisini CRD’ler ile operator yönetir. 
+
+2) Kafka Operator (Strimzi) — Temel bileşenler ve mimari
+Cluster Operator: Kafka kümelerini temsil eden Kafka ve bileşenlerini izler; broker(lar)ı / controller(lar)ı, servisleri, ConfigMap/Secrets’i oluşturur / günceller. 
+Entity Operator:
+  Topic Operator → KafkaTopic CR’lerini Kafka konularına senkronlar (KRaft modda tek yön destek kısıtı notu aşağıda).
+  User Operator → KafkaUser CR’lerinden Kafka kullanıcılarını ve kimlik doğrulamasını üretir/yönetir.
+  Cruise Control (opsiyonel) + KafkaRebalance CRD → Bölüm (partition) ve replika dengesini otomatik önermek/uygulamak için.
+CRD’ler : Kafka, KafkaNodePool (KRaft mimaride roller), KafkaTopic, KafkaUser, KafkaConnect, KafkaMirrorMaker2, KafkaBridge, KafkaRebalance. 
+KRaft (ZooKeeper’siz) mimari notları: Strimzi’de KRaft kümesi kurarken Kafka kaynağına strimzi.io/kraft: enabled ve strimzi.io/node-pools: enabled açıklamaları (annotation) eklenir; roller KafkaNodePool ile tanımlanır (broker, controller veya ikisi). 
+
+3) Neden operator?
+Bildirimsel yönetim: YAML ile “ne istediğinizi” söylersiniz; operator “nasıl yapılacağını” halleder.
+Otomatik uzlaşma: Pod ölse de node değişse de hedef duruma geri döner.
+Day-2 işlemler: Rolling upgrade, ölçekleme, konfigürasyon değişimi, rebalancing, kullanıcı/konu yönetimi vb. hepsi CRD’ler üzerinden akışa oturur.
+
+4) Operator’ü kur (Helm ile)
+# Namespace
+kubectl create namespace kafka-operator
+
+# (İsteğe bağlı) Helm repo ekleme artık OCI olabilir, resmi öneri:
+helm install strimzi-cluster-operator \
+  oci://quay.io/strimzi-helm/strimzi-kafka-operator \
+  -n kafka-operator
+
+Kurulumdan sonra CRD’ler yüklenir ve Cluster Operator pod’u ayağa kalkar
+
+Kontroller Gerçekleştirilir;
+
+4.1) CRD’leri doğrula
+Strimzi’nin tüm kaynak grubu kafka.strimzi.io altındadır.
+# Strimzi CRD’lerini listele
+kubectl get crd | grep kafka.strimzi.io
+
+# API kaynakları gerçekten kayıtlı mı (kısa adlar, namespaced bilgisi vs.)
+kubectl api-resources --api-group=kafka.strimzi.io -o wide
+
+# Örnek: "Kafka" CRD’si kurulmuş ve "Established=True" mi?
+kubectl get crd kafkas.kafka.strimzi.io -o jsonpath='{.status.conditions[?(@.type=="Established")].status}{"\n"}'
+
+# Hangi versiyon(lar) servis ediliyor? (genelde v1beta2)
+kubectl get crd kafkas.kafka.strimzi.io -o jsonpath='{.spec.versions[*].name}{"\n"}'
+
+Beklenti:
+kubectl get crd | grep kafka.strimzi.io çıktısında kafkas.kafka.strimzi.io, kafkatopics.kafka.strimzi.io, kafkausers.kafka.strimzi.io, kafkanodepools.kafka.strimzi.io vb. görünür.
+Established durumu True olmalı.
+
+4.2) Operator pod’unu doğrula
+Helm release adın strimzi-cluster-operator, namespace’in kafka-operator (senin komutuna göre).
+# Helm release durumu
+helm list -n kafka-operator
+helm status strimzi-cluster-operator -n kafka-operator
+
+# Deployment/pod durumu
+kubectl -n kafka-operator get deploy,pods
+
+# Container imajı / versiyon (isteğe bağlı)
+kubectl -n kafka-operator get deploy strimzi-cluster-operator \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+Pod Running / 1/1 olmalı.
+
+4.3)  strimzi-values.yaml dosyasının içeriğini aşağıdaki gibi oluştur
+watchAnyNamespace: false
+watchNamespaces: ["kafka"]
+featureGates: "+UseKRaft,+KafkaNodePools"
+
+operatorü helm ile güncelle
+
+helm upgrade strimzi-cluster-operator   oci://quay.io/strimzi-helm/strimzi-kafka-operator   -n kafka-operator   --reuse-values   -f strimzi-values.yaml
+
+5) kafka-kraft.yaml 'ı oluştur 
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: my-kafka
+  namespace: kafka
+  annotations:
+    strimzi.io/kraft: "enabled"
+    strimzi.io/node-pools: "enabled"
+spec:
+  kafka:
+    # Versiyonu kendi ortamınıza göre ayarlayın
+    version: 4.0.0
+    # (İsteğe bağlı) metadataVersion sahası dok. sürümünüze bağlıdır
+    # metadataVersion: "3.8"
+    config:
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+    listeners:
+      - name: internal
+        port: 9092
+        type: internal
+        tls: false
+      # Dışarıdan erişim istiyorsanız NodePort örneği (opsiyonel):
+      - name: external
+        port: 9094
+        type: nodeport
+        tls: false
+    storage:
+      type: ephemeral
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: controllers
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-kafka
+spec:
+  replicas: 3
+  roles:
+    - controller
+  storage:
+    type: ephemeral
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: brokers
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-kafka
+spec:
+  replicas: 3
+  roles:
+    - broker
+  storage:
+    type: ephemeral
+
+
+
+yaml'ı oluşturduktan sonra aşağıdaki komutu çalıştır
+
+kubectl apply -f kafka-kraft.yaml
+kubectl get all -n kafka
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl get all -n kafka
+NAME                                            READY   STATUS    RESTARTS   AGE
+pod/my-kafka-brokers-0                          1/1     Running   0          7m40s
+pod/my-kafka-brokers-1                          1/1     Running   0          7m40s
+pod/my-kafka-brokers-2                          1/1     Running   0          7m40s
+pod/my-kafka-controllers-3                      1/1     Running   0          7m39s
+pod/my-kafka-controllers-4                      1/1     Running   0          7m39s
+pod/my-kafka-controllers-5                      1/1     Running   0          7m39s
+pod/my-kafka-entity-operator-7596f7977d-kmh7v   2/2     Running   0          6m2s
+
+NAME                                        TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                               AGE
+service/my-kafka-brokers-0                  NodePort    10.109.142.178   <none>        9094:32752/TCP                        7m41s
+service/my-kafka-brokers-1                  NodePort    10.98.163.244    <none>        9094:30126/TCP                        7m41s
+service/my-kafka-brokers-2                  NodePort    10.97.246.48     <none>        9094:30143/TCP                        7m41s
+service/my-kafka-kafka-bootstrap            ClusterIP   10.105.187.248   <none>        9091/TCP,9092/TCP                     7m41s
+service/my-kafka-kafka-brokers              ClusterIP   None             <none>        9090/TCP,9091/TCP,8443/TCP,9092/TCP   7m41s
+service/my-kafka-kafka-external-bootstrap   NodePort    10.110.107.54    <none>        9094:32396/TCP                        7m41s
+
+NAME                                       READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/my-kafka-entity-operator   1/1     1            1           6m2s
+
+NAME                                                  DESIRED   CURRENT   READY   AGE
+replicaset.apps/my-kafka-entity-operator-7596f7977d   1         1         1       6m2s
+
+
+Nodeport ile erişim adresini öğren
+
+kubectl -n kafka get kafka my-kafka \
+  -o jsonpath='{.status.listeners[?(@.name=="external")].bootstrapServers}{"\n"}'
+
+6) Orders topiğini oluşturmak için orders-topic.yaml oluştur
+
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: orders
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-kafka
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    retention.ms: 86400000
+
+7) Kullanıcı (SCRAM) örneği (app1-user.yaml)
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: app1
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: my-kafka
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      - resource: { type: topic, name: orders, patternType: literal }
+        operation: Read
+      - resource: { type: group, name: app1-group, patternType: literal }
+        operation: Read
+      - resource: { type: topic, name: orders, patternType: literal }
+        operation: Write
+
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka apply -f orders-topic.yaml
+kafkatopic.kafka.strimzi.io/orders created
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka apply -f app1-user.yaml
+kafkauser.kafka.strimzi.io/app1 created
+
+9) Test için hazır client imajını kullan
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka run kcli --restart=Never -it --image=quay.io/strimzi/kafka:0.47.0-kafka-4.0.0 -- bash
+
+If you don't see a command prompt, try pressing enter.
+[kafka@kcli kafka]$ 
+[kafka@kcli kafka]$ /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server my-kafka-kafka-bootstrap.kafka.svc:9092 \
+  --topic orders
+>hello ben veysel 
+>bu bir deneme mesajıdır
+[kafka@kcli kafka]$ /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server my-kafka-kafka-bootstrap.kafka.svc:9092 \
+  --topic orders --from-beginning --group g1
+hello ben veysel 
+bu bir deneme mesajıdır
+
+10) client üzerinden erişmek için nodeport bilgisi alınır ve bunun üzerinden brokera erişilir
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl -n kafka get kafka my-kafka \
+>   -o jsonpath='{.status.listeners[?(@.name=="external")].bootstrapServers}{"\n"}'
+10.128.0.8:32396
+
+
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server 10.128.0.8:32396 --topic orders
+>veysel
+>deneme
+
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-consoconsumer.sh --bootstrap-server 10.128.0.8:32396  --topic orders --from-beginning --group g2
+veysel
+deneme
+
