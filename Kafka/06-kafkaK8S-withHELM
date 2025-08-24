@@ -1,1 +1,222 @@
+1- Helm Nedir?
+Helm, Kubernetes için bir paket yöneticisidir.
+Tıpkı Linux’ta apt veya yum gibi, Kubernetes için Hazır Chart (YAML manifest şablonları + varsayılan değerler) kullanarak uygulama kurulumunu kolaylaştırır.
+Örneğin Kafka gibi karmaşık servisleri tek tek Deployment/Service/PVC yazmak yerine bir komutla kurabilirsin.
+Helm chart’larda values.yaml dosyası ile yapılandırmayı değiştirebilirsin.
+
+
+2. Helm Kurulumu
+RHEL8 / CentOS / Ubuntu üzerinde benzer:
+# Helm binary indir
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# Doğrula
+helm version
+
+
+3. Kafka için Helm Chart Repo Ekle
+Bitnami Kafka chart’ı en çok kullanılanlardan:
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+
+
+4. K8s cluster için storage tanımı yapılır
+
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+
+5. kafka-values.yaml dosyası oluşturulur ve içeriği aşağıdaki gibi ayarlanır.
+
+# KRaft (ZooKeeper yok)
+kraft:
+  enabled: true
+# 3 broker
+controller:
+  replicaCount: 3
+  persistence:
+    enabled: false   # demo için disk kapalı (istersen açabilirsin)
+# Genel kalıcılık
+persistence:
+  enabled: false
+# PLAINTEXT'e izin ver / anonim erişim
+allowPlaintextListener: true
+allowAnonymousLogin: true
+# Tüm listener'lar PLAINTEXT
+listeners:
+  client:
+    name: CLIENT
+    containerPort: 9092
+    protocol: PLAINTEXT
+    sslClientAuth: ""
+  interbroker:
+    name: INTERNAL
+    containerPort: 9094
+    protocol: PLAINTEXT
+    sslClientAuth: ""
+  external:
+    name: EXTERNAL
+    containerPort: 9095
+    protocol: PLAINTEXT
+    sslClientAuth: ""
+  controller:
+    name: CONTROLLER
+    containerPort: 9093
+    protocol: PLAINTEXT
+    sslClientAuth: ""
+# Auth bloklarını da PLAINTEXT'e sabitle
+auth:
+  clientProtocol: plaintext
+  interBrokerProtocol: plaintext
+  controllerProtocol: plaintext
+  sasl:
+    enabledMechanisms: []
+  tls:
+    type: disabled
+# İç servis (cluster içi erişim)
+service:
+  type: ClusterIP
+  ports:
+    client: 9092
+# Broker seviyesinde kritik ayarlar (3 broker için RF=3 / minISR=2)
+extraEnvVars:
+  - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+    value: "false"          # otomatik topic oluşmasın
+  - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+    value: "3"
+  - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+    value: "3"
+  - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+    value: "2"
+
+
+6. HELM ile deploymentı uygulamak için aşağıdaki komut uygulanır.
+
+
+
+helm install my-kafka bitnami/kafka -n kafka --create-namespace   -f kafka-values.yaml --wait
+
+kubectl get pods -n kafka
+kubectl get svc -n kafka
+
+Podlar runninge 1/1 olana kadar beklenir.
+
+helm ile deploymentı silinmek istenir ise aşağıdaki komut uygulanır.
+
+helm uninstall my-kafka -n kafka || true
+
+
+
+
+7. Kurulumdan sonra 3 brokerlı bir kafka cluster elde edilir.
+
+[veritabaniegitimleri@spark-master01 ~]$ kubectl exec -it -n kafka my-kafka-controller-0 -- bash
+Defaulted container "kafka" out of: kafka, prepare-config (init)
+
+I have no name!@my-kafka-controller-0:/$ kafka-topics.sh \
+  --bootstrap-server my-kafka:9092 \
+  --create --topic demo3 \
+  --partitions 3 \
+  --replication-factor 3
+Created topic demo3.
+
+=> topic oluşturulduktan sonra console producer çalıştırılır.
+
+I have no name!@my-kafka-controller-0:/$ kafka-console-producer.sh \
+  --bootstrap-server my-kafka:9092 \
+  --topic demo3 \
+> merhaba
+> yeni mesaj 
+> geldi mi
+
+
+=> mesajların topicten okunabildiğini doğrulamak için console consumer çalıştırılır.
+
+[veritabaniegitimleri@spark-master01 kafkascripts]$ kubectl exec -it -n kafka my-kafka-controller-0 -- bash
+Defaulted container "kafka" out of: kafka, prepare-config (init)
+I have no name!@my-kafka-controller-0:/$ kafka-console-consumer.sh \
+  --bootstrap-server my-kafka:9092 \
+  --topic demo3 \
+  --group cg_demo3 \
+  --from-beginning \
+
+8. Servisi dış dünyaya açmak için aşağıdaki kafka-values2.yaml dosyası oluşturulur. Yeni bir deployment ile servis dışarı açılır.
+Önemli nokta yamldaki IP adresi k8s master node'un IP'si olarak güncellenmelidir.
+
+kraft:
+  enabled: true
+controller:
+  replicaCount: 3
+  persistence:
+    enabled: false
+persistence:
+  enabled: false
+# PLAINTEXT + anonim (eğitim/demosu için)
+allowPlaintextListener: true
+allowAnonymousLogin: true
+# Tüm listener'lar PLAINTEXT
+listeners:
+  client:      { name: CLIENT,     containerPort: 9092, protocol: PLAINTEXT, sslClientAuth: "" }
+  interbroker: { name: INTERNAL,   containerPort: 9094, protocol: PLAINTEXT, sslClientAuth: "" }
+  external:    { name: EXTERNAL,   containerPort: 9095, protocol: PLAINTEXT, sslClientAuth: "" }
+  controller:  { name: CONTROLLER, containerPort: 9093, protocol: PLAINTEXT, sslClientAuth: "" }
+# Auth’u da PLAINTEXT’e sabitle
+auth:
+  clientProtocol: plaintext
+  interBrokerProtocol: plaintext
+  controllerProtocol: plaintext
+  sasl:
+    enabledMechanisms: []
+  tls:
+    type: disabled
+# İç servis cluster içi kullanım için
+service:
+  type: ClusterIP
+  ports:
+    client: 9092
+# Dış erişim: NodePort + advertised host/port’lar (her broker için)
+externalAccess:
+  enabled: true
+  controller:
+    service:
+      type: NodePort
+      nodePorts: [30092, 30093, 30094]
+    advertisedListeners:
+      - { name: CLIENT, advertisedHost: "34.46.179.204", advertisedPort: 30092 }
+      - { name: CLIENT, advertisedHost: "34.46.179.204", advertisedPort: 30093 }
+      - { name: CLIENT, advertisedHost: "34.46.179.204", advertisedPort: 30094 }
+# İç konular için 3 broker’a uygun RF/minISR
+extraEnvVars:
+  - { name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE, value: "false" }
+  - { name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "3" }
+  - { name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "3" }
+  - { name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR, value: "2" }
+
+
+Daha sonra eski deployment silinir.
+helm uninstall my-kafka -n kafka || true
+
+Yeni deployment yapılır.
+helm install my-kafka bitnami/kafka -n kafka --create-namespace   -f kafka-values2.yaml --wait
+
+kubectl get pods -n kafka
+kubectl get svc -n kafka
+
+Podlar runninge 1/1 olana kadar beklenir.
+
+
+9. Yeni cluster ayağa kalktığında dışardan erişim için kontroller gerçekleştirilir.
+spark-master sunucusunda zaten kafka kurulumu yapmıştık dolayısı ile bir client gibi kullanılabilir
+sudo su - kafka ile spark masterda kafka user'a geçilir ve aşağıdaki gibi kafka deploymentına erişilip erişilemediği kontrol edilir.
+
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-topics.sh   --bootstrap-server 34.46.179.204:30092 --list
+__consumer_offsets
+demo3
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-topics.sh   --bootstrap-server 34.46.179.204:30093 --list
+__consumer_offsets
+demo3
+
+
+
+
 
