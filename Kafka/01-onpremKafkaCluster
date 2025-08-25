@@ -163,7 +163,7 @@ tcp6       0      0 :::9093                 :::*                    LISTEN      
 
 9- brokerları listele
 
-[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server spark-master01:9092
+[kafka@spark-master01 ~]$ /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server spark-master:9092
 
 
 
