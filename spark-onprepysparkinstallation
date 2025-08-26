@@ -1,0 +1,113 @@
+Kurulumlar 2 node'a da yapılmalıdır.
+Tüm spark node'larında sudo yetkili user ile
+
+sudo mkdir -p /opt/py312
+sudo python3.12 -m venv /opt/py312
+sudo chown -R spark:spark /opt/py312
+sudo chmod -R 755 /opt/py312
+source /opt/py312/bin/activate
+
+
+sudo su - spark
+source /opt/py312/bin/activate
+pip install --upgrade pip setuptools wheel
+pip install pyspark==4.0.0
+
+spark user'ın bashrc dosyasına aşağıdaki satırları ekle
+
+export PYSPARK_PYTHON=/opt/py312/bin/python
+export PYSPARK_DRIVER_PYTHON=/opt/py312/bin/python
+
+spark-defaults.conf dosyasını oluştur ve  içeriğini aşağıdaki gibi ayarla
+
+spark.pyspark.python=/opt/py312/bin/python
+spark.pyspark.driver.python=/opt/py312/bin/python
+
+
+Master sunucuda servisleri restart et.
+ 
+stop-workers.sh 
+stop-master.sh 
+start.master.sh
+start-worker.sh 
+
+Sonra pypsark'ı test et
+
+[veritabaniegitimleri@spark-master01 ~]$ sudo su - spark
+
+[spark@spark-master01 ~]$ source /opt/py312/bin/activate
+
+((py312) ) [spark@spark-master01 ~]$ pyspark --master spark://spark-master01:7077
+Python 3.12.11 (main, Aug 15 2025, 13:38:57) [GCC 8.5.0 20210514 (Red Hat 8.5.0-28)] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+WARNING: Using incubator modules: jdk.incubator.vector
+Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+Setting default log level to "WARN".
+To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+25/08/26 09:01:32 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /__ / .__/\_,_/_/ /_/\_\   version 4.0.0
+      /_/
+
+Using Python version 3.12.11 (main, Aug 15 2025 13:38:57)
+Spark context Web UI available at http://spark-master01.us-central1-c.c.bright-lattice-371819.internal:4040
+Spark context available as 'sc' (master = spark://spark-master01:7077, app id = app-20250826090134-0004).
+SparkSession available as 'spark'.
+
+Test uygulama
+
+data = ["big data is powerful", "spark is fast", "spark is scalable"]
+rdd = sc.parallelize(data)
+words = rdd.flatMap(lambda line: line.split(" "))
+word_counts = words.map(lambda w: (w, 1)).reduceByKey(lambda a,b: a+b)
+print(dict(word_counts.collect()))
+
+
+
+-----
+
+Jupyter kurulumu
+
+1. Jupyter ve gerekli paketleri kur
+Öncelikle spark user lie  /opt/py312 venv’ini aktif et:
+source /opt/py312/bin/activate
+Sonra Jupyter ve eklentileri yükle:
+((py312) ) [spark@spark-master01 ~]$ pip install jupyter notebook ipykernel findspark
+
+2. Spark’ı Jupyter’e tanıt
+Yeni bir kernel ekle:
+python -m ipykernel install --user --name=py312_pyspark --display-name "Python (PySpark)"
+Böylece Jupyter açıldığında “Python (PySpark)” kernel’i gözükecek.
+
+3. Notebooku başlat
+jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser
+
+Çıktıda şu şekilde bir URL göreceksin:
+http://spark-master01:8888/?token=xxxx
+Bunu tarayıcıdan açabilirsin
+Yeni bir notebook aç → kernel olarak Python (PySpark) seç.
+
+
+import findspark
+findspark.init()
+
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("JupyterTest") \
+    .master("spark://spark-master01:7077") \
+    .getOrCreate()
+
+df = spark.createDataFrame([(1, "Big Data"), (2, "PySpark")], ["id", "topic"])
+df.show()
+
+beklenen çıktı
++---+--------+
+| id|   topic|
++---+--------+
+|  1|Big Data|
+|  2| PySpark|
++---+--------+
