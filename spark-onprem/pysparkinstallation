@@ -111,3 +111,12 @@ beklenen çıktı
 |  1|Big Data|
 |  2| PySpark|
 +---+--------+
+
+
+Tavsiye Edilen Mimari (Best Practice)
+Prod ortamda Jupyter cluster node’una direkt kurulmaz.
+Onun yerine:
+Ayrı bir edge/gateway node veya
+Kubernetes üzerinde ayrı pod/service
+kullanılır.
+Kullanıcılar oraya bağlanır, SparkSession cluster’a yönlendirilir.
