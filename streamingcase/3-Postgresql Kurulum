@@ -1,0 +1,20 @@
+sudo yetkili user ile
+
+sudo dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-8-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+sudo dnf -qy module disable postgresql
+sudo dnf install -y postgresql17-server
+sudo /usr/pgsql-17/bin/postgresql-17-setup initdb
+sudo su - postgres
+
+pg_hba.conf'a aşağıdaki satırı ekle
+host    all     all     0.0.0.0/0       md5
+
+postgresql.conf da da aşağıdaki parametreyi ayarla
+listen_addresses = '*'
+
+daha sonra servisleri sudo yetkili user ile başlat
+sudo systemctl enable postgresql-17
+sudo systemctl start postgresql-17
+
+5432 portunu netstat -tlpn komutu ile kontrol et
+sudo - postgres ile postgresql usera geçip psql ile komut satırına bağlanabildiğini gör.
