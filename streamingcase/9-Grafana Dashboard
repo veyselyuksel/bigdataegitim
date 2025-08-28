@@ -1,0 +1,43 @@
+1.PostgreSQL Datasource ekle
+Grafana arayüzünde:
+Configuration → Data Sources → Add data source
+PostgreSQL seç → ayarları gir:
+Host: spark-master01:5432
+Database: streamdb
+User: streamuser
+Password: streampass
+TLS: disable (eğitim ortamında)
+Save & Test → “Database Connection OK” görmelisin.
+
+
+2. Dashboard için Queries
+Line Chart → Şehir bazlı sıcaklık trendi
+Panel → Add → Visualization: Time series
+Query (tumbling tablosu):
+SELECT
+  window_end AS time,
+  city,
+  avg_temp_c
+FROM temperature_tumbling
+ORDER BY time;
+Grafana otomatik olarak time alanını X ekseni yapacak. city seriler halinde ayrı ayrı çizilir.
+
+3. Gauge Chart → Anlık max/min sıcaklık
+Panel → Add → Visualization: Gauge
+Query (sliding tablosu):
+SELECT
+  city,
+  max_temp_c
+FROM temperature_sliding
+WHERE window_end = (SELECT MAX(window_end) FROM temperature_sliding);
+Bu şekilde en güncel window’dan maksimum sıcaklığı görüşür
+
+
+
+4.Gelişmiş: Şehir seçme (Variable)
+Dashboard Settings → Variables → Add variable
+Name: city
+Type: Query
+Query:
+SELECT DISTINCT city FROM temperature_tumbling ORDER BY city;
+Panel Query’lerinde WHERE city = '$city' kullanabilirsin → kullanıcı dropdown’dan şehir seçer.
