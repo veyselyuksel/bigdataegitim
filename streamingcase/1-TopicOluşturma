@@ -1,0 +1,12 @@
+kafka user ile
+
+/opt/kafka/bin/kafka-topics.sh \
+  --create \
+  --topic turkiyesicaklik \
+  --bootstrap-server spark-master01:9092 \
+  --partitions 3 \
+  --replication-factor 
+
+/opt/kafka/bin/kafka-topics.sh --describe \
+  --topic turkiyesicaklik \
+  --bootstrap-server spark-master01:9092
