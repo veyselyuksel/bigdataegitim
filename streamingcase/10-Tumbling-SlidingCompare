@@ -1,0 +1,48 @@
+
+1. Tumbling Window (Sabit Dilimler)
+
+tumbling = parsed.groupBy(
+    window(col("ts"), "30 seconds"),  # pencere boyutu: 30 sn
+    col("city")
+).agg(
+    avg("temperature_c").alias("avg_temp_c")
+)
+
+
+Zamanı 30 saniyelik dilimlere ayırıyor.
+Her şehir için o 30 saniyede gelen tüm satırların ortalama sıcaklığını hesaplıyor.
+Pencereler çakışmaz, her kayıt sadece tek bir pencereye girer.
+Örneğin:
+İstanbul verileri 12:00:00 – 12:00:30 arasındaki tüm ölçümler → avg_temp_c
+Sonra 12:00:30 – 12:01:00 arası ayrı pencere açılır.
+Kullanım: “Her yarım dakikada bir şehirlerin ortalama sıcaklığını istiyorum” gibi periodik raporlama senaryolarında.
+
+
+2. Sliding Window (Kaymalı Pencere)
+
+sliding = parsed.groupBy(
+    window(col("ts"), "30 seconds", "10 seconds"),  # pencere boyutu: 30 sn, kayma: 10 sn
+    col("city")
+).agg(
+    max("temperature_c").alias("max_temp_c"),
+    min("temperature_c").alias("min_temp_c")
+)
+
+Pencere boyutu yine 30 saniye ama bu sefer her 10 saniyede bir yeni pencere açılıyor.
+Yani pencereler çakışıyor.
+Örneğin:
+12:00:00 – 12:00:30 → pencere 1
+12:00:10 – 12:00:40 → pencere 2
+12:00:20 – 12:00:50 → pencere 3
+… böyle kayarak devam eder.
+
+Her şehir için her pencerede max ve min sıcaklık hesaplanır.
+Kullanım: “Son 30 saniyede en yüksek ve en düşük sıcaklık neydi?” sorusunu 10 saniyede bir cevaplamak gibi yakın gerçek zamanlı izleme senaryolarında.
+
+
+Örneğimizdeki Fark
+Tumbling → “Şehir bazlı 30 sn’lik ortalama sıcaklık trendi” 
+Sliding → “Son 30 sn’de gözlenen min/max sıcaklık, her 10 sn’de güncelleniyor” 
+
+Tumbling window → Düzenli, çakışmayan kutular.
+Sliding window → Üst üste binen, sürekli kayan kutular.
