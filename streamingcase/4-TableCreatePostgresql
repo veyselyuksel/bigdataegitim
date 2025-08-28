@@ -1,0 +1,39 @@
+[veritabaniegitimleri@spark-master01 ~]$ sudo su - postgres
+Last login: Thu Aug 28 12:01:51 UTC 2025 on pts/0
+[postgres@spark-master01 ~]$ psql
+psql (17.6)
+Type "help" for help.
+
+postgres=# 
+Yukardaki gibi bağlandıktan sonra aşağıdaki sql'leri çalıştır user create et ve yetkilendir.
+
+
+CREATE DATABASE streamdb;
+CREATE USER streamuser WITH ENCRYPTED PASSWORD 'streampass';
+GRANT ALL PRIVILEGES ON DATABASE streamdb TO streamuser;
+ALTER SCHEMA public OWNER TO streamuser;
+GRANT USAGE ON SCHEMA public TO streamuser;
+GRANT CREATE ON SCHEMA public TO streamuser;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO streamuser;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO streamuser;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO streamuser;
+
+Daha sonra oluşturduğun streamuser ile veritabanına bağlan ve tabloları oluştur.
+
+-- Tumbling window sonuçları
+CREATE TABLE temperature_tumbling (
+    window_start TIMESTAMP,
+    window_end   TIMESTAMP,
+    city         VARCHAR(50),
+    avg_temp_c   DOUBLE PRECISION
+);
+
+-- Sliding window sonuçları
+CREATE TABLE temperature_sliding (
+    window_start TIMESTAMP,
+    window_end   TIMESTAMP,
+    city         VARCHAR(50),
+    max_temp_c   DOUBLE PRECISION,
+    min_temp_c   DOUBLE PRECISION
+);
+
