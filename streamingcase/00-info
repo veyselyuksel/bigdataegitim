@@ -1,0 +1,24 @@
+CASE IOT Sensör verisi.
+Hava durumu istasyonlarından Fahrenheit cinsinden gelen sıcaklık değerini spark streaming ile alarak dereceye dönüştürüp postgresql veritabanına kaydettikten sonra
+grafana dashboard ile görselleştirme işlemi
+
+1-Topic oluştur
+2-Topiğe veri yazacak sensor uygulaması olan producer_sicaklik.py uygulamasını geliştir.
+3-Postgresql veritabanı kurulumu 
+4-Postgresql veritabanı kullanıcı ve tablolarının oluşturulması
+5-spark_sicaklik_stream.py Job'ını geliştir.
+6-Grafana kurulumu
+7-producer_sicaklik.py uygulamasını ve spark_sicaklik_stream.py Job'ını sırasıyla başlat
+8-Kontroller ve iş gözlemleme
+9-Grafana görselleştirme
+
+
+Kafka’da veri:
+Rasgele üretilen sıcaklık ölçümleri
+{"device_id": "sensor-1", "temperature": 22.4, "timestamp": "2025-08-28T10:02:00"}
+{"device_id": "sensor-2", "temperature": 25.1, "timestamp": "2025-08-28T10:02:01"}
+
+Spark işlemleri:
+30 sn’lik tumbling window ile her sensörün ortalama sıcaklığı
+Sliding window ile max/min değerleri çıkar
+
