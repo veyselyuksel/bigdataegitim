@@ -1,0 +1,18 @@
+sudo dnf install grafana -y
+
+
+sudo vi /etc/grafana/grafana.ini
+aşağıdaki gibi değiştir.
+[server]
+http_addr = 0.0.0.0
+http_port = 3000
+
+sudo systemctl enable --now grafana-server
+
+
+browserda 3000 portundan web ui'a erişilir. 
+
+default user passw 
+admin admin
+
+
