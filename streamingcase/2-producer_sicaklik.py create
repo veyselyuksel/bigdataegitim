@@ -1,0 +1,23 @@
+from kafka import KafkaProducer
+import json, time, random, datetime
+
+cities = ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya",
+          "Gaziantep", "Konya", "Adana", "Trabzon", "Diyarbakir"]
+
+producer = KafkaProducer(
+    bootstrap_servers="spark-master01:9092",
+    value_serializer=lambda v: json.dumps(v).encode("utf-8")
+)
+
+while True:
+    ts = datetime.datetime.utcnow().isoformat()
+    for city in cities:
+        temp_f = round(random.uniform(60, 100), 2)  # Fahrenheit
+        data = {
+            "city": city,
+            "temperature_f": temp_f,
+            "timestamp": ts
+        }
+        producer.send("turkiye_sicaklik", value=data)
+        print("Sent:", data)
+    time.sleep(30)  # her dakika gönder
