@@ -1,0 +1,100 @@
+İşleri başlat
+Bu iş sürekli çalışmalı kafkaya veri göndermesi için.
+[spark@spark-master01 ~]$ source /opt/py312/bin/activate
+((py312) )[spark@spark-master01 ~]$ python producer_sicaklik.py
+
+Yeni bir terminal aç saprk stream jobı başlat.
+[spark@spark-master01 ~]$ source /opt/py312/bin/activate
+((py312) ) [spark@spark-master01 ~]$ $SPARK_HOME/bin/spark-submit   --master spark://spark-master01:7077   --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.0,org.postgresql:postgresql:42.7.3   spark_sicaklik_stream.py
+
+
+TOPIC KONTROLLERİ
+Kafka user ile aşağıdaki gibi topiğe veri aktığından emin ol.
+
+/opt/kafka/bin/kafka-console-consumer.sh \
+--bootstrap-server spark-master01:9092 \
+--topic turkiye_sicaklik \
+--from-beginning
+
+
+
+
+STREAMING KONTROLLERİ
+1.
+
+Tarayıcıdan → http://spark-master01:4040 (driver node hangi makinedeyse)
+Spark Streaming job submit ettikten sonra 4040 portu açılır.
+Eğer aynı anda birden fazla job varsa 4041, 4042 … portları da kullanılabilir.
+
+
+2.UI Sekmeleri
+
+Jobs Tab
+Çalışan ve tamamlanan Spark joblarını listeler.
+Streaming job’unda her mikro-batch bir job gibi görünür.
+Burada batch ID, duration (ne kadar sürede işlendiği), input/output satır sayısı izlenir.
+
+Stages Tab
+Bir batch içinde Spark’ın çalıştırdığı stage’leri (map, reduce, shuffle) görürsün.
+Stage sürelerini, task sayılarını, başarısız olanları izleyebilirsin.
+
+SQL Tab
+Structured Streaming DataFrame query’lerinin SQL planını gösterir.
+Windowing, aggregation gibi işlemlerin fiziksel execution planlarını görebilirsin.
+
+Streaming Tab
+Her micro-batch için:
+Input Rate (rows/sec) → Kafka’dan saniyede kaç satır çekildiğini gösterir
+Processing Rate (rows/sec) → Spark’ın saniyede kaç satırı işlediğini gösterir
+Input Rows → Her batch’te toplam kaç satır geldi
+Batch Duration → Her batch’in kaç saniyede işlendiği
+Watermark (varsa) → Event-time işlemlerde kullanılacak su seviyesi
+
+
+3 Örnek Senaryo 
+Streaming tabında → turkiye_sicaklik topic’inden gelen satırları görürsün.
+Input Rows sürekli artmalı (Kafka’dan veri geliyor demektir).
+Processed Rows = PostgreSQL tablona yazılan satırlar (foreachBatch ile).
+Eğer input var ama output yoksa → genelde PostgreSQL write tarafında problem vardır.
+
+
+4. Executor / Worker Durumu
+Executors tabı → hangi worker’da kaç core, ne kadar memory kullanıldığını görebilirsin.
+Eğer cluster modda çalışıyorsan, her worker node’un durumu buradan takip edilir.
+
+
+POSTGRESQL Kontrolleri
+
+[veritabaniegitimleri@spark-master01 ~]$ sudo su - postgres
+Last login: Thu Aug 28 13:36:49 UTC 2025 on pts/2
+[postgres@spark-master01 ~]$ psql -U streamuser -d streamdb -h spark-master01
+Password for user streamuser: 
+psql (17.6)
+Type "help" for help.
+
+streamdb=> \dt
+                 List of relations
+ Schema |         Name         | Type  |   Owner    
+--------+----------------------+-------+------------
+ public | temperature_sliding  | table | streamuser
+ public | temperature_tumbling | table | streamuser
+(2 rows)
+
+streamdb=> select count(*) from temperature_sliding;
+ count 
+-------
+  4140
+(1 row)
+
+streamdb=> select count(*) from temperature_tumbling;
+ count 
+-------
+  1390
+(1 row)
+
+streamdb=> 
+
+Kısacası:
+Streaming Tabı → Gerçek zamanlı veri akışını takip etmek
+SQL Tabı → Query planlarını görmek
+Jobs/Stages Tabı → Batch işlenme sürelerini analiz etmek
