@@ -1,0 +1,128 @@
+Streaming Job’ın Yaptığı İşin Özeti
+Kafka’dan Veri Okuma → turkiye_sicaklik adlı Kafka topic’inden şehir sıcaklık ölçümleri okunuyor.
+JSON Parse → Gelen Kafka mesajları JSON formatında, Spark schema ile parse ediliyor.
+Timestamp ve Dönüşüm → timestamp alanı Timestamp tipine çevriliyor, sıcaklık Fahrenheit → Celsius’a dönüştürülüyor.
+Tumbling Window → 30 saniyelik pencerelerle şehir bazlı ortalama sıcaklık hesaplanıyor. Sonuçlar PostgreSQL’de temperature_tumbling tablosuna yazılıyor.
+Sliding Window → 30 saniyelik pencere, 10 saniye kayma ile hesaplanıyor. Şehir bazlı max/min sıcaklık bulunup PostgreSQL’de temperature_sliding tablosuna yazılıyor.
+Gerçek Zamanlı İşleme → Spark Structured Streaming bu işlemleri sürekli çalıştırıyor, yeni Kafka verileri geldikçe PostgreSQL’e sonuçlar yazılıyor.
+
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col, window, avg, max, min, expr
+from pyspark.sql.types import StructType, StringType, DoubleType, TimestampType
+
+# SparkSession (ana giriş noktası) -> SparkSession objesi
+spark = SparkSession.builder \
+    .appName("TurkiyeSicaklikStreaming") \
+    .master("spark://spark-master01:7077") \
+    .getOrCreate()
+
+spark.sparkContext.setLogLevel("WARN")
+
+# JSON şeması -> StructType objesi
+schema = StructType() \
+    .add("city", StringType()) \
+    .add("temperature_f", DoubleType()) \
+    .add("timestamp", StringType())
+
+# Kafka'dan veri oku -> DataFrame (Streaming DataFrame)
+df = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "spark-master01:9092") \
+    .option("subscribe", "turkiye_sicaklik") \
+    .option("startingOffsets", "latest") \
+    .load()
+# df.columns -> [key, value, topic, partition, offset, timestamp, ...]
+
+
+# Kafka'dan gelen JSON'u parse et -> DataFrame
+parsed = df.selectExpr("CAST(value AS STRING)") \        # DataFrame
+    .select(from_json(col("value"), schema).alias("data")) \  # Column -> struct
+    .select("data.*")  # DataFrame: city, temperature_f, timestamp
+
+# timestamp stringini Timestamp tipine çevir -> DataFrame
+parsed = parsed.withColumn("ts", col("timestamp").cast(TimestampType()))
+
+# Fahrenheit → Celsius dönüşümü -> DataFrame
+parsed = parsed.withColumn("temperature_c",
+    expr("(temperature_f - 32) * 5/9"))
+
+
+# ================= Tumbling Window =================
+# 30 sn'lik pencerelerle ortalama sıcaklık -> DataFrame
+tumbling = parsed.groupBy(
+    window(col("ts"), "30 seconds"),   # Column (window struct)
+    col("city")                        # Column
+).agg(
+    avg("temperature_c").alias("avg_temp_c")  # Column
+)
+
+# Daha okunabilir kolon isimleri -> DataFrame
+tumbling_out = tumbling.selectExpr(
+    "window.start as window_start",
+    "window.end as window_end",
+    "city", "avg_temp_c"
+)
+
+# PostgreSQL'e yazma işlemi -> StreamingQuery
+tumbling_query = tumbling_out.writeStream \
+    .foreachBatch(lambda df, epochId: df.write \   # df = DataFrame (batch snapshot)
+        .format("jdbc")
+        .option("url", "jdbc:postgresql://spark-master01:5432/streamdb")
+        .option("dbtable", "temperature_tumbling")
+        .option("user", "streamuser")
+        .option("password", "streampass")
+        .option("driver", "org.postgresql.Driver")
+        .mode("append")
+        .save()) \
+    .outputMode("update") \
+    .start()   # --> tumbling_query: StreamingQuery objesi
+
+
+# ================= Sliding Window =================
+# 30 sn pencere, 10 sn kayma -> DataFrame
+sliding = parsed.groupBy(
+    window(col("ts"), "30 seconds", "10 seconds"),
+    col("city")
+).agg(
+    max("temperature_c").alias("max_temp_c"),
+    min("temperature_c").alias("min_temp_c")
+)
+
+# Daha okunabilir kolon isimleri -> DataFrame
+sliding_out = sliding.selectExpr(
+    "window.start as window_start",
+    "window.end as window_end",
+    "city", "max_temp_c", "min_temp_c"
+)
+
+# PostgreSQL'e yazma işlemi -> StreamingQuery
+sliding_query = sliding_out.writeStream \
+    .foreachBatch(lambda df, epochId: df.write \   # df = DataFrame (batch snapshot)
+        .format("jdbc")
+        .option("url", "jdbc:postgresql://spark-master01:5432/streamdb")
+        .option("dbtable", "temperature_sliding")
+        .option("user", "streamuser")
+        .option("password", "streampass")
+        .option("driver", "org.postgresql.Driver")
+        .mode("append")
+        .save()) \
+    .outputMode("update") \
+    .start()   # --> sliding_query: StreamingQuery objesi
+
+
+# Streaming job'larını sürekli çalıştır
+# --> Bu satır kodu sonsuza kadar bloklar
+spark.streams.awaitAnyTermination()
+
+
+Özet: Burada Objelerin Türleri
+df, parsed, tumbling, sliding, ..._out → DataFrame (Streaming aware)
+col(...), window(...), avg(...) → Column
+tumbling_query, sliding_query → StreamingQuery
+schema → StructType
+spark → SparkSession
+
+
+
+
