@@ -1,0 +1,80 @@
+Trino k8s yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: trino-demo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-catalogs
+  namespace: trino-demo
+data:
+  duckdb.properties: |
+    connector.name=duckdb
+  postgres.properties: |
+    connector.name=postgresql
+    connection-url=jdbc:postgresql://10.128.0.7:5432/streamdb
+    connection-user=streamuser
+    connection-password=streampass
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+  namespace: trino-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino
+  template:
+    metadata:
+      labels:
+        app: trino
+    spec:
+      tolerations:
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      containers:
+      - name: trino
+        image: trinodb/trino:latest
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        volumeMounts:
+        - name: trino-catalogs
+          mountPath: /etc/trino/catalog
+        - name: data1
+          mountPath: /data1
+      volumes:
+      - name: trino-catalogs
+        configMap:
+          name: trino-catalogs
+      - name: data1
+        hostPath:
+          path: /data1
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino-service
+  namespace: trino-demo
+spec:
+  selector:
+    app: trino
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+      nodePort: 30099   # Fiziksel sunucudan erişim için
+  type: NodePort
