@@ -1,6 +1,7 @@
 İşleri başlat
 Bu iş sürekli çalışmalı kafkaya veri göndermesi için.
 [spark@spark-master01 ~]$ source /opt/py312/bin/activate
+pip install kafka-python
 ((py312) )[spark@spark-master01 ~]$ python producer_sicaklik.py
 
 Yeni bir terminal aç saprk stream jobı başlat.
@@ -13,7 +14,7 @@ Kafka user ile aşağıdaki gibi topiğe veri aktığından emin ol.
 
 /opt/kafka/bin/kafka-console-consumer.sh \
 --bootstrap-server spark-master01:9092 \
---topic turkiye_sicaklik \
+--topic turkiyesicaklik \
 --from-beginning
 
 
