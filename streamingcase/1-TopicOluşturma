@@ -5,7 +5,7 @@ kafka user ile
   --topic turkiyesicaklik \
   --bootstrap-server spark-master01:9092 \
   --partitions 3 \
-  --replication-factor 
+  --replication-factor 2
 
 /opt/kafka/bin/kafka-topics.sh --describe \
   --topic turkiyesicaklik \
